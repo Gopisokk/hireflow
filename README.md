@@ -1,36 +1,137 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HireFlow — Automated Developer Hiring Platform
 
-## Getting Started
+A high-throughput, automated developer hiring platform that replaces manual resume screening with an AI-powered pipeline combining BM25/SBERT ATS scoring and GitHub profile verification.
 
-First, run the development server:
+## 🏗️ Architecture
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+hireflow/
+├── backend/          # FastAPI + Python ML pipeline
+│   ├── main.py       # FastAPI app entry point
+│   ├── config.py     # Settings
+│   ├── database/     # SQLite + sqlite-vec schema & CRUD
+│   ├── pipeline/     # Parser, embedder, ATS scorer, GitHub verifier
+│   └── routers/      # API route handlers
+│
+├── app/              # Next.js App Router (frontend)
+│   ├── page.js       # Landing / Configuration page
+│   ├── dashboard/    # HR Results Dashboard
+│   ├── explorer/     # GitHub Profile Explorer
+│   ├── repo/         # Repository Deep Dive
+│   └── api/          # Next.js API routes (GitHub proxy)
+│
+└── components/       # Shared React components
+    ├── Sidebar.jsx
+    ├── ConfigPanel.jsx
+    ├── PipelineProgress.jsx
+    ├── CandidateTable.jsx
+    ├── CandidateModal.jsx
+    └── ScoreChart.jsx
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 Running the Platform
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Prerequisites
+- Node.js ≥ 18
+- Python ≥ 3.11
+- pip
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 1. Start the Backend (FastAPI)
 
-## Learn More
+```bash
+cd backend
 
-To learn more about Next.js, take a look at the following resources:
+# Create virtual environment (first time)
+python -m venv venv
+venv\Scripts\activate      # Windows
+# source venv/bin/activate  # macOS/Linux
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Install dependencies (first time)
+pip install -r requirements.txt
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Run the server
+uvicorn main:app --reload --port 8000
+```
 
-## Deploy on Vercel
+Backend will be available at: **http://localhost:8000**
+- API docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 2. Start the Frontend (Next.js)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# From the hireflow root directory
+npm install   # first time only
+npm run dev
+```
+
+Frontend will be available at: **http://localhost:3000**
+
+---
+
+## 📋 How to Use
+
+### Step 1 — Prepare Your Data
+Create a CSV with these columns:
+```csv
+roll_number,name,github_username,resume_filename
+CS001,Alice Johnson,alicejohnson,alice_johnson.pdf
+CS002,Bob Smith,bobsmith99,bob_smith.pdf
+```
+
+Place all resume PDFs/DOCXs in a single folder.
+
+### Step 2 — Configure Pipeline
+1. Open **http://localhost:3000**
+2. Click **"🚀 Start Hiring Pipeline"**
+3. Upload your CSV
+4. Enter the resume folder path
+5. Paste the Job Description
+6. Set ATS/GitHub weight ratio
+7. Choose scoring algorithm
+8. Enter GitHub Personal Access Token (optional, for GitHub verification)
+
+### Step 3 — View Results
+Navigate to **http://localhost:3000/dashboard** to see:
+- Real-time pipeline progress
+- Ranked candidates with scores
+- Click any candidate for detailed score breakdown
+
+---
+
+## 🧠 Scoring Algorithms
+
+| Algorithm | Description | Speed |
+|-----------|-------------|-------|
+| Classic BM25 | TF-IDF keyword matching | ⚡⚡⚡ |
+| Neural Fast | Sentence-BERT cosine similarity | ⚡⚡ |
+| Hybrid Efficient | BM25 pre-filter → SBERT re-rank | ⚡⚡ |
+
+## 📊 Pipeline Stages
+
+1. **Parse** — Extract text from PDF/DOCX resumes using PyMuPDF and python-docx
+2. **ATS Score** — Score against JD using selected algorithm
+3. **Shortlist** — Keep top 10% for GitHub verification
+4. **GitHub Verify** — Check repos, commits, forks, active days, language alignment
+5. **Rank** — Merge ATS + GitHub scores with configured weights
+
+## 🔑 GitHub Token Setup
+
+1. Go to: https://github.com/settings/tokens
+2. Click "Generate new token (classic)"
+3. Select scopes: `read:user`, `public_repo`
+4. Copy the token (starts with `ghp_...`)
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16 (App Router), Vanilla CSS |
+| Charts | Chart.js + react-chartjs-2 |
+| Backend | FastAPI + Python 3.11 |
+| Database | SQLite + sqlite-vec (vector search) |
+| ML/NLP | sentence-transformers (all-MiniLM-L6-v2) |
+| Lexical | rank-bm25 |
+| Resume Parsing | PyMuPDF + python-docx |
+| GitHub API | GraphQL + httpx |
+| Streaming | SSE (sse-starlette) |
