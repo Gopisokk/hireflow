@@ -284,15 +284,8 @@ async def run_pipeline(
         if github_token:
             verifier = GitHubVerifier(requests_per_second=1.0)
 
-            # Extract JD languages for alignment scoring
-            jd_languages = extract_skills(job_description)
-            # Filter to just programming languages
-            lang_keywords = {
-                "python", "java", "javascript", "typescript", "c", "c++", "c#",
-                "go", "golang", "rust", "ruby", "php", "swift", "kotlin", "scala",
-                "r", "dart", "elixir", "julia",
-            }
-            jd_langs = [s for s in jd_languages if s.lower() in lang_keywords]
+            # Extract ALL JD skills for per-project tech alignment
+            jd_skills = extract_skills(job_description)
 
             for i, sid in enumerate(shortlisted_ids):
                 student = get_student_by_id(db, sid)
@@ -322,7 +315,7 @@ async def run_pipeline(
                         token=github_token,
                         username=username,
                         resume_projects=resume_projects,
-                        jd_languages=jd_langs,
+                        jd_skills=jd_skills,
                     )
 
                     if result.error:
