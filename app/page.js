@@ -12,6 +12,14 @@ const FEATURES = [
   { icon: '🎯', title: 'Configurable Weights', desc: 'Fine-tune ATS vs GitHub scoring weights to match your hiring priorities.' },
 ];
 
+// Pre-computed particle positions — deterministic so SSR & client match
+const PARTICLES = Array.from({ length: 20 }, (_, i) => ({
+  left: `${(i * 17 + 5) % 100}%`,
+  top: `${(i * 23 + 10) % 100}%`,
+  animationDelay: `${(i * 0.7) % 8}s`,
+  animationDuration: `${6 + (i * 0.6) % 8}s`,
+}));
+
 export default function HomePage() {
   const [showConfig, setShowConfig] = useState(false);
   const [pipelineStarted, setPipelineStarted] = useState(false);
@@ -29,13 +37,8 @@ export default function HomePage() {
         <div className="landing-gradient-1" />
         <div className="landing-gradient-2" />
         <div className="landing-particles">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <div key={i} className="particle" style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 8}s`,
-              animationDuration: `${6 + Math.random() * 8}s`,
-            }} />
+          {PARTICLES.map((style, i) => (
+            <div key={i} className="particle" style={style} />
           ))}
         </div>
       </div>

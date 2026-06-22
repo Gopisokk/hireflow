@@ -1,0 +1,162 @@
+[
+  {
+    "role": "Cloud Engineer",
+    "algorithm": "bm25",
+    "ats_score": 58.03,
+    "github_score": 30.9,
+    "final_score": 47.18,
+    "device_used": "cuda",
+    "elapsed_seconds": 110.7,
+    "status": "Success"
+  },
+  {
+    "role": "Cloud Engineer",
+    "algorithm": "neural",
+    "ats_score": 57.13,
+    "github_score": 30.9,
+    "final_score": 46.64,
+    "device_used": "cuda",
+    "elapsed_seconds": 1.03,
+    "status": "Success"
+  },
+  {
+    "role": "Cloud Engineer",
+    "algorithm": "hybrid_efficient",
+    "ats_score": 57.49,
+    "github_score": 30.9,
+    "final_score": 46.85,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.55,
+    "status": "Success"
+  },
+  {
+    "role": "Cloud Engineer",
+    "algorithm": "colbert",
+    "ats_score": 96.11,
+    "github_score": 30.9,
+    "final_score": 70.03,
+    "device_used": "cuda",
+    "elapsed_seconds": 69.77,
+    "status": "Success"
+  },
+  {
+    "role": "System Engineer (C)",
+    "algorithm": "bm25",
+    "ats_score": 38.73,
+    "github_score": 31.9,
+    "final_score": 36.0,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.48,
+    "status": "Success"
+  },
+  {
+    "role": "System Engineer (C)",
+    "algorithm": "neural",
+    "ats_score": 53.25,
+    "github_score": 31.9,
+    "final_score": 44.71,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.56,
+    "status": "Success"
+  },
+  {
+    "role": "System Engineer (C)",
+    "algorithm": "hybrid_efficient",
+    "ats_score": 47.44,
+    "github_score": 31.9,
+    "final_score": 41.22,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.57,
+    "status": "Success"
+  },
+  {
+    "role": "System Engineer (C)",
+    "algorithm": "colbert",
+    "ats_score": 48.33,
+    "github_score": 31.9,
+    "final_score": 41.76,
+    "device_used": "cuda",
+    "elapsed_seconds": 55.67,
+    "status": "Success"
+  },
+  {
+    "role": "AI Engineer",
+    "algorithm": "bm25",
+    "ats_score": 23.64,
+    "github_score": 32.0,
+    "final_score": 26.98,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.45,
+    "status": "Success"
+  },
+  {
+    "role": "AI Engineer",
+    "algorithm": "neural",
+    "ats_score": 73.33,
+    "github_score": 32.0,
+    "final_score": 56.8,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.48,
+    "status": "Success"
+  },
+  {
+    "role": "AI Engineer",
+    "algorithm": "hybrid_efficient",
+    "ats_score": 53.45,
+    "github_score": 32.0,
+    "final_score": 44.87,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.51,
+    "status": "Success"
+  },
+  {
+    "role": "AI Engineer",
+    "algorithm": "colbert",
+    "ats_score": 77.86,
+    "github_score": 32.0,
+    "final_score": 59.52,
+    "device_used": "cuda",
+    "elapsed_seconds": 65.87,
+    "status": "Success"
+  },
+  {
+    "role": "Full Stack Developer (FSD)",
+    "algorithm": "bm25",
+    "ats_score": 22.66,
+    "github_score": 31.8,
+    "final_score": 26.32,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.46,
+    "status": "Success"
+  },
+  {
+    "role": "Full Stack Developer (FSD)",
+    "algorithm": "neural",
+    "ats_score": 60.53,
+    "github_score": 31.8,
+    "final_score": 49.04,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.53,
+    "status": "Success"
+  },
+  {
+    "role": "Full Stack Developer (FSD)",
+    "algorithm": "hybrid_efficient",
+    "ats_score": 45.38,
+    "github_score": 31.8,
+    "final_score": 39.95,
+    "device_used": "cuda",
+    "elapsed_seconds": 0.55,
+    "status": "Success"
+  },
+  {
+    "role": "Full Stack Developer (FSD)",
+    "algorithm": "colbert",
+    "ats_score": 84.78,
+    "github_score": 31.8,
+    "final_score": 63.59,
+    "device_used": "cuda",
+    "elapsed_seconds": 52.49,
+    "status": "Success"
+  }
+]

@@ -130,7 +130,8 @@ _PROJECT_SECTION_RE = re.compile(
 _NEXT_SECTION_RE = re.compile(
     r"(?:^|\n)\s*(?:experience|education|skills?|certifications?|"
     r"achievements?|awards?|publications?|interests?|hobbies|"
-    r"references?|summary|objective|contact|languages)\s*[:\-]?\s*\n",
+    r"references?|summary|objective|contact|languages|technologies|"
+    r"open source|competitive)\s*[:\-]?\s*\n",
     re.IGNORECASE,
 )
 
@@ -139,7 +140,7 @@ _PROJECT_BULLET_RE = re.compile(
 )
 
 _PROJECT_TITLE_RE = re.compile(
-    r"(?:^|\n)\s*([A-Z][A-Za-z0-9\s\-:&/]{3,60}?)(?:\s*[-–—|:]\s*|\s*\n)",
+    r"(?:^|\n)\s*([A-Z][A-Za-z0-9\s\-:&/]{3,60}?)(?:\s*[-–—|:]?\s*|(?=\s*\n))",
 )
 
 
@@ -178,58 +179,97 @@ def extract_projects(text: str) -> list[str]:
     """
     Heuristically extract project names from resume text.
 
-    Strategy:
-    1. Find the "Projects" section by matching common headers.
-    2. Extract until the next section header.
-    3. Pull project names from bullet points or title-like lines.
-
-    Parameters
-    ----------
-    text : str
-        The full resume text.
-
-    Returns
-    -------
-    list[str]
-        List of project names (best-effort extraction).
+    Handles the common resume formats:
+      - "Project Name – Tech Stack (Python, ...) [link]"   (plain title line)
+      - "• Project Name – description"                      (bullet format)
+      - "Project Name | Stack"                              (pipe separator)
     """
     projects: list[str] = []
+    seen: set[str] = set()
 
-    # Try to find the projects section
+    def _clean_title(raw: str) -> str:
+        """Strip tech stack, links, em-dashes and trailing noise from a project title."""
+        # Replace replacement character (bad encoding of em-dash)
+        raw = raw.replace("\ufffd", " – ")
+        # Split on em-dash / en-dash / pipe — everything after is tech stack or desc
+        core = re.split(r"\s*[–—|]\s*", raw)[0]
+        # Remove parenthetical tech stack "(Python, FastAPI, ...)"
+        core = re.sub(r"\s*\([^)]{0,80}\)", "", core)
+        # Remove trailing [link], [GitHub], etc.
+        core = re.sub(r"\s*\[.*?\]", "", core)
+        # Remove trailing punctuation
+        core = core.strip().rstrip(":.,–—-")
+        return core
+
+    def _add(name: str) -> None:
+        name = _clean_title(name).strip()
+        key = name.lower()
+        # Must be 2+ words, at least 4 chars, no pure-noise fragments
+        words = name.split()
+        if len(name) >= 4 and len(words) >= 2 and key not in seen:
+            seen.add(key)
+            projects.append(name)
+
+    # ── Step 1: isolate the Projects section ──────────────────────────────────
     section_match = _PROJECT_SECTION_RE.search(text)
     if section_match:
         start = section_match.end()
-        # Find where the next section begins
         next_section = _NEXT_SECTION_RE.search(text[start:])
         end = start + next_section.start() if next_section else len(text)
         project_section = text[start:end]
     else:
-        # Fallback: scan the entire text for project-like patterns
         project_section = text
 
-    # Extract from bullet points (most common resume format)
-    seen: set[str] = set()
-    for match in _PROJECT_BULLET_RE.finditer(project_section):
-        line = match.group(1).strip()
-        # Take the first sentence / phrase (before a dash or colon as description)
-        name_match = re.match(r"^([^:\-–—|]{3,60}?)(?:\s*[-–—|:]\s*|$)", line)
-        if name_match:
-            name = name_match.group(1).strip()
-            # Skip lines that are just descriptions (too many lowercase words)
-            words = name.split()
-            if len(words) <= 8 and name.lower() not in seen:
-                seen.add(name.lower())
-                projects.append(name)
+    lines = [ln.strip() for ln in project_section.splitlines()]
 
-    # If we didn't find bullets in a dedicated section, try title patterns
-    if not projects and section_match:
-        for match in _PROJECT_TITLE_RE.finditer(project_section):
-            name = match.group(1).strip()
-            if len(name) > 3 and name.lower() not in seen:
-                seen.add(name.lower())
-                projects.append(name)
+    # ── Step 2: pick out title lines ──────────────────────────────────────────
+    # In the target resume, each project starts with a non-bullet line that:
+    #   - Contains the project name (Title Case or mixed)
+    #   - Often has tech in parens and [link] at the end
+    #   - Is followed by bullet/description lines
+    _NOISE_STARTS = {
+        "built", "trained", "developed", "implemented", "created",
+        "designed", "wrote", "used", "applied", "worked", "fixed",
+        "added", "achieved", "engineered", "consolidated", "refactored",
+    }
 
-    return projects[:20]  # Cap at 20 to avoid noise
+    for line in lines:
+        if not line:
+            continue
+
+        # Skip pure bullet description lines
+        if re.match(r"^[•\-\*\u2022\u25CF\u25CB\u2023\d]", line):
+            continue
+
+        # Skip lines that start with a lowercase action verb (description fragment)
+        first_word = line.split()[0].lower().rstrip(".")
+        if first_word in _NOISE_STARTS:
+            continue
+
+        # Must have at least 2 words and start with uppercase
+        words = line.split()
+        if len(words) < 2 or not line[0].isupper():
+            continue
+
+        # Skip lines that look like section headers (single word or all caps short)
+        if len(words) == 1:
+            continue
+
+        # Skip lines that are clearly statistics/scores  e.g. "54.66 SMAPE, Rank..."
+        if re.match(r"^\d", line):
+            continue
+
+        _add(line)
+
+    # ── Step 3: deduplicate and filter fragments ──────────────────────────────
+    result = []
+    for p in projects:
+        words = p.split()
+        # Filter out lines where the first word is a noise word (post-clean)
+        if words[0].lower() not in _NOISE_STARTS and len(words) >= 2:
+            result.append(p)
+
+    return result[:12]
 
 
 def get_skill_category(skill: str) -> Optional[str]:

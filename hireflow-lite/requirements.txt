@@ -1,0 +1,11 @@
+PyMuPDF
+python-docx
+rank-bm25
+sentence-transformers
+torch
+httpx
+spacy
+nltk
+python-dotenv
+ragatouille
+numpy

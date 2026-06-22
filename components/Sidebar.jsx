@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
   { path: '/',          icon: '🏠', label: 'Home' },
@@ -9,25 +10,31 @@ const NAV_ITEMS = [
   { path: '/repo',      icon: '📦', label: 'Repo Analyzer' },
 ];
 
-export default function Sidebar({ currentPath }) {
+export default function Sidebar() {
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [pipelineStatus, setPipelineStatus] = useState('idle'); // idle | running | error
+  const [pipelineStatus, setPipelineStatus] = useState('idle');
+  // ⚠️ KEY FIX: defer active-state to client-only to prevent hydration mismatch.
+  // Server renders nothing as "active"; client sets it after first paint.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const res = await fetch('/api/backend/pipeline/status', { method: 'GET', signal: AbortSignal.timeout(2000) });
+        const res = await fetch('/api/backend/pipeline/status', {
+          method: 'GET',
+          signal: AbortSignal.timeout(2000),
+        });
         if (res.ok) {
-          const contentType = res.headers.get('content-type');
-          if (contentType && contentType.includes('text/event-stream')) {
+          const data = await res.json().catch(() => null);
+          if (data && data.running) {
             setPipelineStatus('running');
           } else {
-            const data = await res.json().catch(() => null);
-            if (data && data.stage && data.stage !== 'idle' && data.stage !== 'completed') {
-              setPipelineStatus('running');
-            } else {
-              setPipelineStatus('idle');
-            }
+            setPipelineStatus('idle');
           }
         }
       } catch {
@@ -39,7 +46,11 @@ export default function Sidebar({ currentPath }) {
     return () => clearInterval(interval);
   }, []);
 
-  const activePath = currentPath || (typeof window !== 'undefined' ? window.location.pathname : '/');
+  const getIsActive = (itemPath) => {
+    if (!mounted) return false; // server + first render: nothing active
+    return itemPath === pathname ||
+      (itemPath !== '/' && pathname.startsWith(itemPath));
+  };
 
   return (
     <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -61,13 +72,12 @@ export default function Sidebar({ currentPath }) {
 
       <nav className="sidebar-nav">
         {NAV_ITEMS.map(item => {
-          const isActive = activePath === item.path || 
-            (item.path !== '/' && activePath.startsWith(item.path));
+          const isActive = getIsActive(item.path);
           return (
             <a
               key={item.path}
               href={item.path}
-              className={`sidebar-link ${isActive ? 'sidebar-active' : ''}`}
+              className={`sidebar-link${isActive ? ' sidebar-active' : ''}`}
               title={collapsed ? item.label : undefined}
             >
               <span className="sidebar-link-icon">{item.icon}</span>
@@ -84,7 +94,7 @@ export default function Sidebar({ currentPath }) {
           {!collapsed && (
             <span className="sidebar-status-text">
               {pipelineStatus === 'running' ? 'Pipeline Running' :
-               pipelineStatus === 'error' ? 'Pipeline Error' : 'Pipeline Idle'}
+               pipelineStatus === 'error'   ? 'Pipeline Error'   : 'Pipeline Idle'}
             </span>
           )}
         </div>

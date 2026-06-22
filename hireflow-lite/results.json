@@ -1,0 +1,79 @@
+{
+  "candidate_name": "GOPI R K",
+  "candidate_email": "gopi030506@gmail.com",
+  "github_username": "Gopisokk",
+  "ats": {
+    "score": 79.27,
+    "algo_used": "hybrid_efficient",
+    "matched_skills": [
+      "developer",
+      "mysql",
+      "react.js",
+      "docker",
+      "aws",
+      "git",
+      "candidate",
+      "service",
+      "rest",
+      "api",
+      "architecture",
+      "unit",
+      "rest apis",
+      "unit tests"
+    ],
+    "missing_skills": [
+      "java",
+      "stack",
+      "experience",
+      "spring",
+      "boot",
+      "hibernate",
+      "microservices",
+      "postgresql",
+      "javascript",
+      "junit",
+      "backend",
+      "design",
+      "microservice",
+      "test",
+      "sql",
+      "query",
+      "frontend",
+      "team",
+      "java full stack developer",
+      "spring boot",
+      "scalable backend services",
+      "design microservice architectures",
+      "sql queries",
+      "frontend teams"
+    ],
+    "explanation": "Hybrid score: 79.3/100 (BM25=100.0 × 0.4 + SBERT=65.5 × 0.6). Matched 14 JD keywords."
+  },
+  "github": {
+    "score": 0.0,
+    "factors_checked": [],
+    "factor_scores": {},
+    "explanation": "Skipped — no GitHub token provided."
+  },
+  "project_verification": [],
+  "final_score": 92.5,
+  "stage1_final_score": 47.56,
+  "llm_evaluation": {
+    "is_active": true,
+    "strengths": [
+      "Spring Boot",
+      "Hibernate"
+    ],
+    "gaps": [
+      "Java programming",
+      "AWS certification"
+    ],
+    "justification": "Strong alignment with core backend requirements despite some gaps."
+  },
+  "weights": {
+    "ats_weight": 0.6,
+    "github_weight": 0.4
+  },
+  "device_used": "cuda",
+  "elapsed_seconds": 61.37
+}

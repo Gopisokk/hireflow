@@ -1,0 +1,87 @@
+================================================================================
+                       HIREFLOW-LITE RUN INSTRUCTIONS
+================================================================================
+
+HireFlow-Lite is a standalone, lightweight, fully synchronous Python CLI prototype
+designed to parse resumes, rank them against job descriptions (using lexical and 
+neural matching), and verify candidates' credentials against their GitHub profiles.
+
+--------------------------------------------------------------------------------
+1. PREREQUISITES
+--------------------------------------------------------------------------------
+- Python 3.11 (configured and installed on this machine)
+- NVIDIA GPU (NVIDIA GeForce GTX 1650 or similar) for CUDA GPU acceleration
+- Active internet connection (required for downloading ML models on first run
+  and querying the GitHub GraphQL API)
+
+--------------------------------------------------------------------------------
+2. ACTIVATING THE VIRTUAL ENVIRONMENT
+--------------------------------------------------------------------------------
+Open PowerShell or Command Prompt, navigate to the project directory, and activate:
+
+In PowerShell:
+  cd c:\Users\radha\Desktop\finalyear_project\code_file\hireflow\hireflow-lite
+  .\venv\Scripts\Activate.ps1
+
+In Command Prompt:
+  cd c:\Users\radha\Desktop\finalyear_project\code_file\hireflow\hireflow-lite
+  .\venv\Scripts\activate.bat
+
+--------------------------------------------------------------------------------
+3. RUNNING THE SCORING PIPELINE
+--------------------------------------------------------------------------------
+You can run the pipeline with different ATS algorithms using the `--algo` argument.
+
+A. HYBRID LEXICAL & SEMANTIC SCORING (DEFAULT - RECOMMENDED)
+Combines BM25 lexical keyword matching (40% weight) with SBERT Neural semantic 
+similarity (60% weight) running on your NVIDIA GPU (CUDA):
+
+  python main.py --resume "C:\Users\radha\Desktop\gopi__resumesmbc.docx" --jd "We are seeking a Machine Learning Engineer to develop, train, and deploy AI/ML solutions. The candidate should have strong Python programming skills and experience with machine learning and deep learning frameworks." --algo hybrid_efficient
+
+B. CLASSIC LEXICAL SCORING (BM25)
+Runs classic token frequency-based scoring (fast, does not load neural networks):
+
+  python main.py --resume "C:\Users\radha\Desktop\gopi__resumesmbc.docx" --jd "We are seeking a Machine Learning Engineer to develop, train, and deploy AI/ML solutions. The candidate should have strong Python programming skills and experience with machine learning and deep learning frameworks." --algo bm25
+
+C. NEURAL SEMANTIC SCORING (SBERT)
+Runs sentence embedding cosine similarity directly on your GPU:
+
+  python main.py --resume "C:\Users\radha\Desktop\gopi__resumesmbc.docx" --jd "We are seeking a Machine Learning Engineer to develop, train, and deploy AI/ML solutions. The candidate should have strong Python programming skills and experience with machine learning and deep learning frameworks." --algo neural
+
+D. COLBERT LATE-INTERACTION SCORING (COLBERT)
+Runs ColBERT late-interaction retrieval algorithm using answerdotai/answerai-colbert-small-v1, leveraging GPU hardware acceleration:
+
+  python main.py --resume "C:\Users\radha\Desktop\gopi__resumesmbc.docx" --jd "We are seeking a Machine Learning Engineer to develop, train, and deploy AI/ML solutions. The candidate should have strong Python programming skills and experience with machine learning and deep learning frameworks." --algo colbert
+
+--------------------------------------------------------------------------------
+4. RUNNING WITH GITHUB PROFILE VERIFICATION
+--------------------------------------------------------------------------------
+If you want to run the deep 40-factor GitHub verifier, you must provide your 
+GitHub Personal Access Token (PAT) via the `--token` parameter.
+
+Example:
+  python main.py --resume "C:\Users\radha\Desktop\gopi__resumesmbc.docx" --jd "Looking for a Python Developer..." --token YOUR_GITHUB_TOKEN --algo hybrid_efficient
+
+--------------------------------------------------------------------------------
+5. CUSTOMIZING GITHUB VERIFICATION FACTORS
+--------------------------------------------------------------------------------
+To list all 40 verification factors organized by category, run:
+  python main.py --list-factors
+
+To select specific factors for the verification score (space-separated list):
+  python main.py --resume "C:\Users\radha\Desktop\gopi__resumesmbc.docx" --jd "Looking for a Python Developer..." --token YOUR_GITHUB_TOKEN --factors active_days fork_ratio total_commits language_match project_exists
+
+--------------------------------------------------------------------------------
+6. UNDERSTANDING THE OUTPUTS
+--------------------------------------------------------------------------------
+1. Console Output:
+   - Displays real-time progress steps.
+   - Shows device detection output (confirms CUDA GPU model & VRAM).
+   - Lists extracted resume candidate fields, scores, and matched/missing skills.
+   - Displays a visual bar chart breakdown of the checked GitHub factor scores.
+
+2. results.json:
+   - Written automatically to the `hireflow-lite/` directory.
+   - Contains the structured parsed candidate details, weights, individual ATS 
+     and GitHub score breakdowns, and the final consolidated score.
+================================================================================

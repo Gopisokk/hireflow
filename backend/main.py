@@ -27,11 +27,11 @@ from routers.pipeline_status import router as pipeline_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Run startup tasks before the app starts accepting requests."""
-    print("🚀 HireFlow backend starting up...")
+    print("[HireFlow] Backend starting up...")
     init_database()
-    print("✅ Database initialized.")
+    print("[HireFlow] Database initialized.")
     yield
-    print("🔴 HireFlow backend shutting down.")
+    print("[HireFlow] Backend shutting down.")
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
