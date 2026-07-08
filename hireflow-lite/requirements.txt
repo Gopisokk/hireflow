@@ -9,3 +9,8 @@ nltk
 python-dotenv
 ragatouille
 numpy
+sqlite-vec
+gliner
+openai
+Pillow
+transformers
