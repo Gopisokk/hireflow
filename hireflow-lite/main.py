@@ -173,17 +173,30 @@ def run_pipeline(args) -> dict:
         hyre_text=hyre_text,
     )
 
-    ats_score = ats_result["score"]
+    ats_base_score = ats_result["score"]
+    
+    # 10% Project Relevance Heuristic (pre-verification)
+    project_score = min(10.0, len(resume_projects) * 5.0)
+    
+    # 10% Experience/Education Heuristic
+    exp_score = 0.0
+    if resume_data.get("education"): exp_score += 5.0
+    if len(resume_data.get("raw_text", "")) > 1000: exp_score += 5.0
+    
+    ats_score = ats_base_score + project_score + exp_score
+
     print()
     print(f"  ✅ ATS Score: {ats_score:.1f}/100")
     print(f"  📊 Algorithm: {ats_result['algo_used']}")
-    if ats_result["matched_skills"]:
+    print(f"     - Base Skills & Semantic (80%): {ats_base_score:.1f}")
+    print(f"     - Project & Experience (20%): {(project_score + exp_score):.1f}")
+    if ats_result.get("matched_skills"):
         print(f"  ✓ Matched Skills ({len(ats_result['matched_skills'])}): "
               + ", ".join(ats_result["matched_skills"][:10]))
-    if ats_result["missing_skills"]:
+    if ats_result.get("missing_skills"):
         print(f"  ✗ Missing Skills ({len(ats_result['missing_skills'])}): "
               + ", ".join(ats_result["missing_skills"][:10]))
-    print(f"  💡 {ats_result['explanation']}")
+    print(f"  💡 {ats_result.get('explanation', '')}")
     print()
 
     # ── Step 3: GitHub Verification ───────────────────────────────────────────
@@ -292,17 +305,17 @@ def run_pipeline(args) -> dict:
     re_ranked = re_rank_candidates_llm([candidate_dict], args.jd)
     updated_candidate = re_ranked[0]
     
-    llm_score = updated_candidate["score"]
+    # The LLM score modification is bypassed to preserve objective scoring.
     llm_explanation = updated_candidate.get("llm_explanation", {
         "strengths": [],
         "gaps": [],
-        "fit_justification": "Stage 1 scoring retained (LLM re-ranker bypassed)."
+        "fit_justification": "Stage 1 scoring retained."
     })
     
-    is_llm_active = "llm_explanation" in updated_candidate and len(llm_explanation.get("strengths", [])) > 0
+    is_llm_active = len(llm_explanation.get("strengths", [])) > 0
     
     if is_llm_active:
-        print(f"  ✅ Adjusted Final Score: {llm_score:.1f}/100")
+        print(f"  ✅ LLM Evaluation Complete (Objective Score Retained: {final['final_score']:.1f}/100)")
         print("  ✓ Strengths:")
         for strg in llm_explanation["strengths"]:
             print(f"      - {strg}")
@@ -319,9 +332,7 @@ def run_pipeline(args) -> dict:
     print(f"  ATS Score:       {ats_score:6.1f}/100  (weight: {final['ats_weight']:.0%})")
     print(f"  GitHub Score:    {github_score:6.1f}/100  (weight: {final['github_weight']:.0%})")
     print(f"  ─────────────────────────────")
-    print(f"  Stage 1 Score:   {final['final_score']:6.1f}/100")
-    if is_llm_active:
-        print(f"  LLM Adjusted:    {llm_score:6.1f}/100")
+    print(f"  Final Score:     {final['final_score']:6.1f}/100")
     print(f"  Time elapsed:    {elapsed:.1f}s")
     print()
 
@@ -356,7 +367,7 @@ def run_pipeline(args) -> dict:
             }
             for pv in project_verification_results
         ],
-        "final_score": llm_score if is_llm_active else final["final_score"],
+        "final_score": final["final_score"],
         "stage1_final_score": final["final_score"],
         "llm_evaluation": {
             "is_active": is_llm_active,

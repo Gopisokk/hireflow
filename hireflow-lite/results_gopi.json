@@ -1,0 +1,29 @@
+{
+  "candidate": "GOPI R K",
+  "resume_path": "C:\\Users\\radha\\Desktop\\gopi_iresume.docx",
+  "ats_score": 30.599999999999998,
+  "base_score": 22.95,
+  "project_score": 3.825,
+  "exp_score": 3.825,
+  "algo": "hybrid_efficient",
+  "matched_skills": [
+    "programming"
+  ],
+  "missing_skills": [
+    "java",
+    "spring",
+    "restful apis"
+  ],
+  "hybrid_shortlist": [
+    {
+      "candidate_id": 1,
+      "rrf_score": 0.01639344262295082,
+      "bm25_rank": null,
+      "vector_rank": 1,
+      "vector_distance": 0.6728816628456116,
+      "name": "GOPI R K",
+      "github_link": "Gopisokk",
+      "filename": "gopi_iresume.docx.json"
+    }
+  ]
+}

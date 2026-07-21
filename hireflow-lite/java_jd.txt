@@ -1,0 +1,13 @@
+Java Full Stack Developer
+Java
+Spring Boot
+Hibernate
+Microservices
+MySQL
+PostgreSQL
+React.js
+JavaScript
+Docker
+AWS
+Git
+JUnit
