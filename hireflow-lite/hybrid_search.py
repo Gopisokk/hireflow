@@ -204,9 +204,11 @@ def _sanitize_fts_query(text: str) -> str:
     Strip FTS5 special characters and take the first 200 content words
     to avoid overly long / malformed FTS queries.
     """
-    # Remove characters that break FTS5 query syntax
-    for ch in ('"', "'", "(", ")", "*", ":", "^", "-", "+"):
-        text = text.replace(ch, " ")
+    # Remove characters that break FTS5 query syntax (including sentence punctuation)
+    # Use regex to keep only alphanumeric words — guaranteed FTS5-safe
+    import re as _re
+    text = _re.sub(r"[^a-zA-Z0-9\s]", " ", text)
+
     # Collapse whitespace, take first 200 words
     words = text.split()[:200]
     # FTS5 OR-mode: join with spaces (implicit AND by default, which is fine)

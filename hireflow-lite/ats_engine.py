@@ -123,57 +123,109 @@ def extract_jd_keywords(jd_text: str) -> list[str]:
 
     Returns
     -------
-    list[str]
-        Lowercased, deduplicated list of keywords.
+    dict[str, list[str]]
+        Dictionary containing 'required', 'preferred', and 'all' keyword lists.
     """
     if not jd_text or not jd_text.strip():
-        return []
+        return {"required": [], "preferred": [], "all": []}
 
     print("  → Extracting JD keywords with spaCy…")
     nlp = _get_spacy_nlp()
-    doc = nlp(jd_text)
-
-    seen: set[str] = set()
-    keywords: list[str] = []
     
-    # Extract common tech terms we care about natively
+    # Split JD into required and preferred
+    required_text = jd_text
+    preferred_text = ""
+    
+    import re
+    pref_match = re.search(r"(preferred|nice to have|bonus|desired) skills?:?(.*?)(?:\n\n|\Z)", jd_text, re.IGNORECASE | re.DOTALL)
+    if pref_match:
+        preferred_text = pref_match.group(2)
+        required_text = required_text.replace(pref_match.group(0), "")
+        
+    req_match = re.search(r"(required|core|must have|essential) skills?:?(.*?)(?:\n\n|\Z)", required_text, re.IGNORECASE | re.DOTALL)
+    if req_match:
+        required_text = req_match.group(2)
+
+    STOP_SKILLS = {
+        # Generic JD structure words
+        "developer", "candidate", "service", "api", "system", "application",
+        "project", "experience", "engineer", "work", "team", "skills",
+        "knowledge", "ability", "responsibilities", "opportunity", "company",
+        "years", "role", "job", "software", "development", "environment",
+        "requirements", "requirement",
+        # Generic adjectives / nouns that leak from JD prose
+        "title", "type", "time", "minimum", "year", "senior", "junior", "mid",
+        "good", "strong", "deep", "solid", "excellent", "familiarity",
+        "communication", "teamwork", "principle", "design", "process",
+        "cross", "functional", "end", "complete", "full", "plus", "nice",
+        "backend", "frontend", "fullstack", "stack", "level", "day", "week",
+        "month", "basis", "way", "understanding", "understanding", "aspect",
+        "use", "used", "using", "build", "building", "create", "working",
+        "including", "related", "relevant", "key", "core", "bonus", "desired",
+        "preferred", "required", "must", "nice", "basic", "advanced",
+        "field", "area", "domain", "industry", "sector", "position",
+        "hire", "hiring", "seek", "looking", "ideal", "following", "below",
+        "range", "scale", "scope", "impact", "value", "high", "low",
+        "new", "existing", "large", "small", "complex", "simple",
+        "platform", "tool", "framework",  # too generic on their own
+        # Single tokens that are fragments of multi-word tech terms.
+        # 'boot' is blocked here because 'spring boot' is captured as a
+        # multi-word noun chunk in the chunk phase below.
+        "boot", "skill", "expertise",
+        "proficiency", "proficient", "language",
+    }
+    
     tech_keywords = {
         "python", "java", "c++", "c", "c#", "javascript", "typescript", "react", "angular",
-        "vue", "node.js", "express", "django", "flask", "fastapi", "spring", "aws", "azure",
-        "gcp", "docker", "kubernetes", "terraform", "ci/cd", "linux", "git", "sql", "mysql",
-        "postgresql", "mongodb", "redis", "elasticsearch", "machine learning", "deep learning",
-        "ai", "nlp", "computer vision", "pytorch", "tensorflow", "keras", "pandas", "numpy",
-        "scikit-learn", "data science", "data engineering", "spark", "hadoop", "kafka",
-        "devops", "agile", "scrum", "html", "css", "next.js", "nextjs", "graphql", "rest api",
-        "microservices", "kubernetes", "bash", "shell", "powershell", "golang", "rust", "ruby",
-        "llms", "genai", "prompt engineering"
+        "vue", "node.js", "express", "django", "flask", "fastapi", "spring", "spring boot",
+        "hibernate", "aws", "azure", "gcp", "docker", "kubernetes", "terraform", "ci/cd",
+        "linux", "git", "sql", "mysql", "postgresql", "mongodb", "redis", "elasticsearch",
+        "machine learning", "deep learning", "ai", "nlp", "computer vision",
+        "pytorch", "tensorflow", "keras", "pandas", "numpy", "scikit-learn",
+        "data science", "data engineering", "spark", "hadoop", "kafka",
+        "devops", "agile", "scrum", "html", "css", "next.js", "nextjs",
+        "graphql", "rest api", "restful api", "rest apis", "restful apis",
+        "microservices", "bash", "shell", "powershell", "golang", "rust", "ruby",
+        "llms", "genai", "prompt engineering", "rag", "vector databases",
+        "junit", "mcp", "langchain", "langsmith", "openai", "huggingface",
+        "spring boot", "hibernate", "jpa", "maven", "gradle", "junit", "jvm",
     }
 
-    # First pass: standard noun/proper noun extraction
-    for token in doc:
-        if token.is_stop or token.is_punct or token.is_space:
-            continue
-        lower = token.lemma_.lower()
-        if token.pos_ in ("NOUN", "PROPN") or lower in tech_keywords:
-            if lower not in seen and len(lower) > 1:
-                seen.add(lower)
-                keywords.append(lower)
+    def _extract_from_text(text: str) -> list[str]:
+        if not text.strip(): return []
+        doc = nlp(text)
+        seen = set()
+        kws = []
+        for token in doc:
+            if token.is_stop or token.is_punct or token.is_space: continue
+            lower = token.lemma_.lower()
+            if lower in STOP_SKILLS: continue
+            if token.pos_ in ("NOUN", "PROPN") or lower in tech_keywords:
+                if lower not in seen and len(lower) > 1:
+                    seen.add(lower)
+                    kws.append(lower)
+        for chunk in doc.noun_chunks:
+            chunk_text = chunk.text.lower().strip()
+            if chunk_text.startswith("a "): chunk_text = chunk_text[2:]
+            if chunk_text.startswith("an "): chunk_text = chunk_text[3:]
+            if chunk_text.startswith("the "): chunk_text = chunk_text[4:]
+            if chunk_text in STOP_SKILLS: continue
+            if chunk_text not in seen and len(chunk_text.split()) > 1:
+                if not any(stop in chunk_text.split() for stop in STOP_SKILLS):
+                    seen.add(chunk_text)
+                    kws.append(chunk_text)
+        return kws
 
-    # Second pass: noun chunks for multi-word phrases (e.g., "machine learning")
-    for chunk in doc.noun_chunks:
-        chunk_text = chunk.text.lower().strip()
-        # Remove common determiners from the start
-        if chunk_text.startswith("a "): chunk_text = chunk_text[2:]
-        if chunk_text.startswith("an "): chunk_text = chunk_text[3:]
-        if chunk_text.startswith("the "): chunk_text = chunk_text[4:]
-        
-        if chunk_text not in seen and len(chunk_text.split()) > 1:
-            if not any(stop in chunk_text.split() for stop in ["team", "opportunity", "company", "years", "experience", "role", "work", "job"]):
-                seen.add(chunk_text)
-                keywords.append(chunk_text)
+    req_kws = _extract_from_text(required_text)
+    pref_kws = _extract_from_text(preferred_text)
+    all_kws = list(dict.fromkeys(req_kws + pref_kws))
 
-    print(f"  → Extracted {len(keywords)} JD keywords.")
-    return keywords
+    # If parsing failed to find explicitly labeled required skills, fallback to treating all as required
+    if not req_kws and all_kws:
+        req_kws = all_kws
+
+    print(f"  → Extracted {len(req_kws)} Required, {len(pref_kws)} Preferred keywords.")
+    return {"required": req_kws, "preferred": pref_kws, "all": all_kws}
 
 
 # =====================================================================
@@ -313,8 +365,8 @@ def score_bm25(
     # Take the MAX score: the best-matching section represents the resume
     raw_score: float = float(max(raw_scores)) if len(raw_scores) > 0 else 0.0
 
-    # Normalise using a fixed empirical ceiling
-    BM25_CEILING = 12.0
+    # Normalise using a fixed empirical ceiling (increased to 25.0 to prevent easy 100%)
+    BM25_CEILING = 25.0
     normalised = (raw_score / BM25_CEILING) * 100.0
     normalised = round(min(max(normalised, 0.0), 100.0), 2)
 
@@ -326,23 +378,45 @@ def score_bm25(
     top_terms = list(dict.fromkeys(top_terms))[:15]
 
     # Skill matching (with raw_text fallback)
-    jd_keywords = extract_jd_keywords(jd_text)
-    matched, missing = compute_skill_match(resume_skills, jd_keywords, raw_text=resume_text)
+    jd_kws = extract_jd_keywords(jd_text)
+    req_kws = jd_kws["required"]
+    pref_kws = jd_kws["preferred"]
+
+    req_matched, req_missing = compute_skill_match(resume_skills, req_kws, raw_text=resume_text)
+    pref_matched, pref_missing = compute_skill_match(resume_skills, pref_kws, raw_text=resume_text)
+
+    # Skill score calculation:
+    # If preferred keywords exist   → 40% req + 20% pref + 20% semantic (total 80)
+    # If NO preferred keywords exist → 60% req + 0% pref + 20% semantic (total 80)
+    # This prevents giving free 20/20 points when JD has no preferred section.
+    if req_kws and pref_kws:
+        req_score  = 40.0 * min(1.0, len(req_matched) / len(req_kws))
+        pref_score = 20.0 * min(1.0, len(pref_matched) / len(pref_kws))
+    elif req_kws:
+        req_score  = 60.0 * min(1.0, len(req_matched) / len(req_kws))
+        pref_score = 0.0
+    else:
+        req_score  = 60.0
+        pref_score = 0.0
+    semantic_score = normalised * 0.20
+    
+    partial_score = req_score + pref_score + semantic_score
 
     explanation = (
-        f"BM25 corpus-relative score: {raw_score:.4f} (raw, max across "
-        f"{len(pseudo_docs)} pseudo-docs) → {normalised:.1f}/100 "
-        f"(ceiling={BM25_CEILING}). "
-        f"Top overlapping terms: {', '.join(top_terms[:10]) or 'none'}. "
-        f"Matched {len(matched)}/{len(jd_keywords)} JD keywords."
+        f"BM25 semantic: {normalised:.1f}/100. "
+        f"Required skills missing ({len(req_missing)}): -{len(req_missing)*7}pts. "
+        f"Preferred skills missing ({len(pref_missing)}): -{len(pref_missing)*2}pts. "
     )
 
-    print(f"  → BM25 score: {normalised:.1f}/100")
+    print(f"  → BM25 Partial Score (out of 80): {partial_score:.1f}")
     return {
-        "score": normalised,
+        "score": partial_score,  # This is out of 80 right now
+        "semantic_score": normalised,
+        "req_score": req_score,
+        "pref_score": pref_score,
         "algo_used": "bm25",
-        "matched_skills": matched,
-        "missing_skills": missing,
+        "matched_skills": req_matched + pref_matched,
+        "missing_skills": req_missing + pref_missing,
         "explanation": explanation,
     }
 
@@ -421,25 +495,45 @@ def score_neural(
     
     # Calibrate score: raw cosine similarity rarely goes above 0.5 for different texts
     # We stretch the range [0.15, 0.5] -> [0, 100]
-    score = max(0.0, (cosine_sim - 0.15) / 0.35) * 100.0
-    score = round(min(score, 100.0), 2)
+    normalised = max(0.0, (cosine_sim - 0.15) / 0.35) * 100.0
+    normalised = round(min(normalised, 100.0), 2)
 
-    # Skill matching (with raw_text fallback)
-    jd_keywords = extract_jd_keywords(jd_text)
-    matched, missing = compute_skill_match(resume_skills, jd_keywords, raw_text=resume_text)
+    jd_kws = extract_jd_keywords(jd_text)
+    req_kws = jd_kws["required"]
+    pref_kws = jd_kws["preferred"]
+
+    req_matched, req_missing = compute_skill_match(resume_skills, req_kws, raw_text=resume_text)
+    pref_matched, pref_missing = compute_skill_match(resume_skills, pref_kws, raw_text=resume_text)
+
+    # Skill score: no free preferred points when JD has no preferred section
+    if req_kws and pref_kws:
+        req_score  = 40.0 * min(1.0, len(req_matched) / len(req_kws))
+        pref_score = 20.0 * min(1.0, len(pref_matched) / len(pref_kws))
+    elif req_kws:
+        req_score  = 60.0 * min(1.0, len(req_matched) / len(req_kws))
+        pref_score = 0.0
+    else:
+        req_score  = 60.0
+        pref_score = 0.0
+    semantic_score = normalised * 0.20
+    
+    partial_score = req_score + pref_score + semantic_score
 
     explanation = (
-        f"SBERT cosine similarity: {cosine_sim:.4f} → {score:.1f}/100. "
-        f"Model: all-MiniLM-L6-v2 (device={device}). "
-        f"Matched {len(matched)}/{len(jd_keywords)} JD keywords."
+        f"SBERT semantic: {normalised:.1f}/100. "
+        f"Required skills missing ({len(req_missing)}). "
+        f"Preferred skills missing ({len(pref_missing)}). "
     )
 
-    print(f"  → Neural score: {score:.1f}/100")
+    print(f"  → Neural Partial Score (out of 80): {partial_score:.1f}")
     return {
-        "score": score,
+        "score": partial_score,
+        "semantic_score": normalised,
+        "req_score": req_score,
+        "pref_score": pref_score,
         "algo_used": "neural",
-        "matched_skills": matched,
-        "missing_skills": missing,
+        "matched_skills": req_matched + pref_matched,
+        "missing_skills": req_missing + pref_missing,
         "explanation": explanation,
     }
 
@@ -475,39 +569,39 @@ def score_hybrid(
     # ── BM25 component ──────────────────────────────────────────────
     print("  → [Hybrid] Computing BM25 component…")
     bm25_result = score_bm25(resume_text, jd_text, resume_skills)
-    bm25_norm = bm25_result["score"] / 100.0  # 0-1
+    bm25_norm = bm25_result["semantic_score"] / 100.0  # 0-1
 
     # ── SBERT component ─────────────────────────────────────────────
     print("  → [Hybrid] Computing SBERT component…")
     neural_result = score_neural(resume_text, jd_text, resume_skills, device=device, hyre_text=hyre_text)
-    sbert_norm = neural_result["score"] / 100.0  # 0-1
+    sbert_norm = neural_result["semantic_score"] / 100.0  # 0-1
 
     # ── Combine ─────────────────────────────────────────────────────
-    final = (bm25_norm * 0.4 + sbert_norm * 0.6) * 100.0
+    semantic_score_norm = (bm25_norm * 0.4 + sbert_norm * 0.6) * 100.0
     
-    # Merge skill info from the more thorough sub-result
-    matched = list(dict.fromkeys(
-        bm25_result["matched_skills"] + neural_result["matched_skills"]
-    ))
-    missing = list(dict.fromkeys(
-        [m for m in bm25_result["missing_skills"] if m not in set(s.lower() for s in matched)]
-    ))
-
-    final = round(min(max(final, 0.0), 100.0), 2)
+    # We use the neural_result's skill extraction logic since it's the same
+    req_score = neural_result["req_score"]
+    pref_score = neural_result["pref_score"]
+    semantic_score = semantic_score_norm * 0.20
+    
+    partial_score = req_score + pref_score + semantic_score
+    partial_score = round(min(max(partial_score, 0.0), 80.0), 2)
 
     explanation = (
-        f"Hybrid score: {final:.1f}/100 "
-        f"(BM25={bm25_result['score']:.1f} × 0.4 + "
-        f"SBERT={neural_result['score']:.1f} × 0.6). "
-        f"Matched {len(matched)} JD keywords."
+        f"Hybrid semantic: {semantic_score_norm:.1f}/100. "
+        f"Required skills missing: -{(40.0 - req_score):.0f}pts. "
+        f"Preferred skills missing: -{(20.0 - pref_score):.0f}pts. "
     )
 
-    print(f"  → Hybrid score: {final:.1f}/100")
+    print(f"  → Hybrid Partial Score (out of 80): {partial_score:.1f}")
     return {
-        "score": final,
+        "score": partial_score,
+        "semantic_score": semantic_score_norm,
+        "req_score": req_score,
+        "pref_score": pref_score,
         "algo_used": "hybrid_efficient",
-        "matched_skills": matched,
-        "missing_skills": missing,
+        "matched_skills": neural_result["matched_skills"],
+        "missing_skills": neural_result["missing_skills"],
         "explanation": explanation,
     }
 
@@ -580,39 +674,47 @@ def score_colbert(
         else:
             raw_score = 0.0
 
-        # Normalise by number of JD tokens to get per-token average MaxSim
-        # (ColBERT's raw score scales with token count, not match quality)
-        jd_token_count = max(len(word_tokenize(jd_text.lower())), 1)
-        avg_score = raw_score / jd_token_count
+        normalised = (raw_score / 150.0) * 100.0
+        normalised = round(min(max(normalised, 0.0), 100.0), 2)
 
-        # Calibrated range stretching: ColBERT's per-token MaxSim clusters
-        # around 0.85–1.10 for typical resume-JD pairs.  The discriminative
-        # signal lives in that narrow band.  Stretch [0.85, 1.10] → [0, 100].
-        COLBERT_FLOOR = 0.85
-        COLBERT_CEIL = 1.10
-        score = max(0.0, (avg_score - COLBERT_FLOOR) / (COLBERT_CEIL - COLBERT_FLOOR)) * 100.0
-        score = round(min(max(score, 0.0), 100.0), 2)
+        jd_kws = extract_jd_keywords(jd_text)
+        req_kws = jd_kws["required"]
+        pref_kws = jd_kws["preferred"]
 
-        print(f"  → ColBERT raw={raw_score:.4f}, jd_tokens={jd_token_count}, "
-              f"avg_per_token={avg_score:.4f}")
+        req_matched, req_missing = compute_skill_match(resume_skills, req_kws, raw_text=resume_text)
+        pref_matched, pref_missing = compute_skill_match(resume_skills, pref_kws, raw_text=resume_text)
 
-        # Skill matching (with raw_text fallback)
-        jd_keywords = extract_jd_keywords(jd_text)
-        matched, missing = compute_skill_match(resume_skills, jd_keywords, raw_text=resume_text)
+        # Skill score calculation:
+        # If preferred keywords exist   → 40% req + 20% pref + 20% semantic (total 80)
+        # If NO preferred keywords exist → 60% req + 0% pref + 20% semantic (total 80)
+        if req_kws and pref_kws:
+            req_score  = 40.0 * min(1.0, len(req_matched) / len(req_kws))
+            pref_score = 20.0 * min(1.0, len(pref_matched) / len(pref_kws))
+        elif req_kws:
+            req_score  = 60.0 * min(1.0, len(req_matched) / len(req_kws))
+            pref_score = 0.0
+        else:
+            req_score  = 60.0
+            pref_score = 0.0
+        semantic_score = normalised * 0.20
+        
+        partial_score = req_score + pref_score + semantic_score
 
         explanation = (
-            f"ColBERT per-token MaxSim: {avg_score:.4f} (raw={raw_score:.4f} / "
-            f"{jd_token_count} tokens) → {score:.1f}/100. "
-            f"Model: answerai-colbert-small-v1. "
-            f"Matched {len(matched)}/{len(jd_keywords)} JD keywords."
+            f"ColBERT semantic: {normalised:.1f}/100. "
+            f"Required skills missing ({len(req_missing)}): -{len(req_missing)*7}pts. "
+            f"Preferred skills missing ({len(pref_missing)}): -{len(pref_missing)*2}pts. "
         )
 
-        print(f"  → ColBERT score: {score:.1f}/100")
+        print(f"  → ColBERT Partial Score (out of 80): {partial_score:.1f}")
         return {
-            "score": score,
+            "score": partial_score,
+            "semantic_score": normalised,
+            "req_score": req_score,
+            "pref_score": pref_score,
             "algo_used": "colbert",
-            "matched_skills": matched,
-            "missing_skills": missing,
+            "matched_skills": req_matched + pref_matched,
+            "missing_skills": req_missing + pref_missing,
             "explanation": explanation,
         }
 
@@ -987,21 +1089,21 @@ def re_rank_candidates_llm(candidates_list: list[dict], jd_text: str) -> list[di
     prompt = (
         f"Job Description:\n{jd_text}\n\n"
         f"Candidates to Rank:\n" + "\n".join(candidates_summary) + "\n\n"
-        f"Your task is to re-rank these candidates listwise based on their fit for the role. "
+        f"Your task is to evaluate these candidates based on their fit for the role. "
+        f"You must ONLY cite strengths that are explicitly present in the candidate's 'Matched Skills' list. "
+        f"Do NOT infer or hallucinate skills that are not explicitly provided. "
         f"For each candidate, output:\n"
-        f"1. A new adjusted score from 0 to 100 based on their experience and skills alignment.\n"
-        f"2. 2-3 specific strengths.\n"
-        f"3. 1-2 gaps or missing qualifications.\n"
-        f"4. A 1-sentence justification of their fit.\n\n"
+        f"1. 2-3 specific strengths (grounded ONLY in their matched skills).\n"
+        f"2. 1-2 gaps or missing qualifications.\n"
+        f"3. A 1-sentence justification of their fit.\n\n"
         f"Respond ONLY with a valid JSON block of this format:\n"
         f"{{\n"
-        f"  \"rankings\": [\n"
+        f"  \"evaluations\": [\n"
         f"    {{\n"
         f"      \"candidate_id\": 1,\n"
-        f"      \"new_score\": 92.5,\n"
-        f"      \"strengths\": [\"Strong Python experience\", \"FastAPI expertise\"],\n"
-        f"      \"gaps\": [\"Missing Kubernetes certification\"],\n"
-        f"      \"justification\": \"Excellent backend developer with solid REST design experience.\"\n"
+        f"      \"strengths\": [\"Python\", \"FastAPI\"],\n"
+        f"      \"gaps\": [\"Missing Kubernetes\"],\n"
+        f"      \"justification\": \"Solid backend developer with required Python/FastAPI experience.\"\n"
         f"    }}\n"
         f"  ]\n"
         f"}}"
@@ -1009,7 +1111,8 @@ def re_rank_candidates_llm(candidates_list: list[dict], jd_text: str) -> list[di
     
     system_instruction = (
         "You are an expert recruitment system. Output ONLY a clean, valid JSON object matching "
-        "the requested schema. Do not output any markdown wrapper or surrounding text."
+        "the requested schema. Do not output any markdown wrapper or surrounding text. "
+        "Never hallucinate skills not present in the candidate's profile."
     )
     
     try:
@@ -1019,17 +1122,16 @@ def re_rank_candidates_llm(candidates_list: list[dict], jd_text: str) -> list[di
         json_clean = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", response_text.strip())
         
         ranking_data = json.loads(json_clean)
-        rankings = ranking_data.get("rankings", [])
+        evaluations = ranking_data.get("evaluations", [])
         
         # Build lookup map
-        rank_map = {int(r["candidate_id"]): r for r in rankings if "candidate_id" in r}
+        rank_map = {int(r["candidate_id"]): r for r in evaluations if "candidate_id" in r}
         
         updated_candidates = []
         for idx, c in enumerate(candidates_list):
             cand_id = idx + 1
             if cand_id in rank_map:
                 r_info = rank_map[cand_id]
-                c["score"] = float(r_info.get("new_score", c["score"]))
                 c["llm_explanation"] = {
                     "strengths": r_info.get("strengths", []),
                     "gaps": r_info.get("gaps", []),
@@ -1037,8 +1139,8 @@ def re_rank_candidates_llm(candidates_list: list[dict], jd_text: str) -> list[di
                 }
             else:
                 c["llm_explanation"] = {
-                    "strengths": ["Matched key skills"],
-                    "gaps": ["No major gaps identified"],
+                    "strengths": c.get("matched_skills", [])[:3],
+                    "gaps": c.get("missing_skills", [])[:2],
                     "fit_justification": "Retained Stage 1 scoring due to parser fallback."
                 }
             updated_candidates.append(c)
