@@ -1,1177 +1,897 @@
 """
-ats_engine.py — HireFlow-Lite ATS Scoring Engine
-==================================================
+ats_engine.py — HireFlow-Lite: Evidence Aggregation ATS Scoring Engine v2
+=========================================================================
 
-Standalone module implementing four ATS (Applicant Tracking System) resume-
-scoring algorithms.  Every function is **synchronous**; no async anywhere.
+Root-cause fixes from v1:
+  - Sigmoid midpoint was 0.65 → destroyed semantic for cosines in 0.18-0.36 range.
+    Fixed: midpoint=0.30, k=15 now maps 0.28→44%, 0.36→71%, 0.50→95%.
+  - Project evidence was SBERT-first — fails for short project texts.
+    Fixed: keyword-first (required skills found in projects), SBERT secondary.
+  - Skills in projects were weighted equal to skills just listed.
+    Fixed: evidence multiplier — each project demonstrating a skill adds +50% weight.
+  - Semantic was over-weighted (15%) and dominated ranking.
+    Fixed: semantic reduced to 10% (supporting signal, not primary).
 
-Algorithms
-----------
-1. **BM25**            — Classic lexical scoring via rank-bm25.
-2. **Neural (SBERT)**  — Semantic similarity via sentence-transformers.
-3. **Hybrid**          — Weighted blend of BM25 (40 %) + SBERT (60 %).
-4. **ColBERT**         — Late-interaction retrieval via ragatouille.
+Component Weights (sum = 1.00):
+  35%  Required Skill Match   (+ evidence multiplier from projects)
+  25%  Project Evidence        (keyword-first, SBERT secondary)
+  10%  Semantic Alignment      (calibrated cosine — supporting signal only)
+  10%  Experience Relevance    (seniority + domain)
+   8%  Keyword Coverage        (BM25-inspired JD term coverage)
+   5%  Resume Quality          (structure, sections, completeness)
+   4%  Education               (field + degree level)
+   3%  Certifications          (cloud certs, open source, competitions)
+   +0 to -15  Penalty Layer
 
-Public API
-----------
-- extract_jd_keywords(jd_text)          → list[str]
-- compute_skill_match(resume, jd_kws)   → (matched, missing)
-- score_bm25(resume_text, jd_text, resume_skills)
-- score_neural(resume_text, jd_text, resume_skills, device)
-- score_hybrid(resume_text, jd_text, resume_skills, device)
-- score_colbert(resume_text, jd_text, resume_skills)
-- run_ats(resume_text, jd_text, resume_skills, algo, device) → dict
+Confidence Tiers:
+  95–100  Exceptional Match   → Strongly Recommend
+  85–94   Strong Match        → Recommend
+  70–84   Good Match          → Recommend with Notes
+  55–69   Potential Match     → Further Review
+  40–54   Moderate Match      → Hold for Review
+  25–39   Weak Match          → Not Recommended
+  0–24    Poor Match          → Do Not Proceed
 """
 
 from __future__ import annotations
 
-import json
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import re
-import sys
-import tempfile
+import math
 import warnings
-from typing import Any
+from collections import Counter
+from typing import Optional
 
-import httpx
+import numpy as np
 
-# Force UTF-8 stdout/stderr on Windows to avoid UnicodeEncodeError
+# ── GPU / Model ───────────────────────────────────────────────────────────────
+
+DEVICE = "cpu"
+_MODEL = None
+
 try:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-    if hasattr(sys.stderr, "reconfigure"):
-        sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
+    import torch
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        DEVICE = "cuda"
+except ImportError:
     pass
 
 
-# ── NLTK bootstrap (runs on import — lightweight, silent) ───────────────
-import nltk
-
-nltk.download("punkt_tab", quiet=True)
-nltk.download("stopwords", quiet=True)
-
-# ── Standard-lib / lightweight imports ──────────────────────────────────
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-
-# ── Module-level caches for lazily-loaded heavy models ──────────────────
-_spacy_nlp: Any | None = None
-_sbert_model: Any | None = None
-_sbert_device: str | None = None
-
-# ── NLTK stopword set (cheap to build once) ─────────────────────────────
-_NLTK_STOPWORDS: set[str] = set(stopwords.words("english"))
-
-
-# =====================================================================
-#  Helper — lazy spaCy loader
-# =====================================================================
-def _get_spacy_nlp():
-    """Return the cached spaCy ``en_core_web_sm`` pipeline, loading it once."""
-    global _spacy_nlp
-    if _spacy_nlp is None:
-        print("  → Loading spaCy en_core_web_sm model...")
-        import spacy
-
-        try:
-            _spacy_nlp = spacy.load("en_core_web_sm")
-        except OSError:
-            # Model not installed — attempt a download first.
-            print("  → en_core_web_sm not found; downloading…")
-            from spacy.cli import download as spacy_download
-
-            spacy_download("en_core_web_sm")
-            _spacy_nlp = spacy.load("en_core_web_sm")
-        print("  → spaCy model loaded.")
-    return _spacy_nlp
-
-
-# =====================================================================
-#  Helper — lazy SBERT loader
-# =====================================================================
-def _get_sbert_model(device: str = "cpu"):
-    """Return the cached SentenceTransformer model, loading it once.
-
-    If the caller changes ``device`` between calls the model is reloaded.
-    """
-    global _sbert_model, _sbert_device
-    if _sbert_model is None or _sbert_device != device:
-        print(f"  → Loading SBERT model (all-MiniLM-L6-v2) on '{device}'...")
+def _get_model():
+    global _MODEL
+    if _MODEL is None:
         from sentence_transformers import SentenceTransformer
-
-        _sbert_model = SentenceTransformer("all-MiniLM-L6-v2", device=device)
-        _sbert_device = device
-        print("  → SBERT model loaded.")
-    return _sbert_model
+        _MODEL = SentenceTransformer("all-MiniLM-L6-v2", device=DEVICE)
+    return _MODEL
 
 
-# =====================================================================
-#  1. JD Keyword Extraction
-# =====================================================================
-def extract_jd_keywords(jd_text: str) -> list[str]:
-    """Extract deduplicated noun/proper-noun keywords from a job description.
-
-    Uses spaCy ``en_core_web_sm`` (lazy-loaded) to tokenise the text,
-    removes stopwords, and keeps only tokens tagged as **NOUN** or
-    **PROPN**.
-
-    Parameters
-    ----------
-    jd_text : str
-        Raw job description text.
-
-    Returns
-    -------
-    dict[str, list[str]]
-        Dictionary containing 'required', 'preferred', and 'all' keyword lists.
-    """
-    if not jd_text or not jd_text.strip():
-        return {"required": [], "preferred": [], "all": []}
-
-    print("  → Extracting JD keywords with spaCy…")
-    nlp = _get_spacy_nlp()
-    
-    # Split JD into required and preferred
-    required_text = jd_text
-    preferred_text = ""
-    
-    import re
-    pref_match = re.search(r"(preferred|nice to have|bonus|desired) skills?:?(.*?)(?:\n\n|\Z)", jd_text, re.IGNORECASE | re.DOTALL)
-    if pref_match:
-        preferred_text = pref_match.group(2)
-        required_text = required_text.replace(pref_match.group(0), "")
-        
-    req_match = re.search(r"(required|core|must have|essential) skills?:?(.*?)(?:\n\n|\Z)", required_text, re.IGNORECASE | re.DOTALL)
-    if req_match:
-        required_text = req_match.group(2)
-
-    STOP_SKILLS = {
-        # Generic JD structure words
-        "developer", "candidate", "service", "api", "system", "application",
-        "project", "experience", "engineer", "work", "team", "skills",
-        "knowledge", "ability", "responsibilities", "opportunity", "company",
-        "years", "role", "job", "software", "development", "environment",
-        "requirements", "requirement",
-        # Generic adjectives / nouns that leak from JD prose
-        "title", "type", "time", "minimum", "year", "senior", "junior", "mid",
-        "good", "strong", "deep", "solid", "excellent", "familiarity",
-        "communication", "teamwork", "principle", "design", "process",
-        "cross", "functional", "end", "complete", "full", "plus", "nice",
-        "backend", "frontend", "fullstack", "stack", "level", "day", "week",
-        "month", "basis", "way", "understanding", "understanding", "aspect",
-        "use", "used", "using", "build", "building", "create", "working",
-        "including", "related", "relevant", "key", "core", "bonus", "desired",
-        "preferred", "required", "must", "nice", "basic", "advanced",
-        "field", "area", "domain", "industry", "sector", "position",
-        "hire", "hiring", "seek", "looking", "ideal", "following", "below",
-        "range", "scale", "scope", "impact", "value", "high", "low",
-        "new", "existing", "large", "small", "complex", "simple",
-        "platform", "tool", "framework",  # too generic on their own
-        # Single tokens that are fragments of multi-word tech terms.
-        # 'boot' is blocked here because 'spring boot' is captured as a
-        # multi-word noun chunk in the chunk phase below.
-        "boot", "skill", "expertise",
-        "proficiency", "proficient", "language",
-    }
-    
-    tech_keywords = {
-        "python", "java", "c++", "c", "c#", "javascript", "typescript", "react", "angular",
-        "vue", "node.js", "express", "django", "flask", "fastapi", "spring", "spring boot",
-        "hibernate", "aws", "azure", "gcp", "docker", "kubernetes", "terraform", "ci/cd",
-        "linux", "git", "sql", "mysql", "postgresql", "mongodb", "redis", "elasticsearch",
-        "machine learning", "deep learning", "ai", "nlp", "computer vision",
-        "pytorch", "tensorflow", "keras", "pandas", "numpy", "scikit-learn",
-        "data science", "data engineering", "spark", "hadoop", "kafka",
-        "devops", "agile", "scrum", "html", "css", "next.js", "nextjs",
-        "graphql", "rest api", "restful api", "rest apis", "restful apis",
-        "microservices", "bash", "shell", "powershell", "golang", "rust", "ruby",
-        "llms", "genai", "prompt engineering", "rag", "vector databases",
-        "junit", "mcp", "langchain", "langsmith", "openai", "huggingface",
-        "spring boot", "hibernate", "jpa", "maven", "gradle", "junit", "jvm",
-    }
-
-    def _extract_from_text(text: str) -> list[str]:
-        if not text.strip(): return []
-        doc = nlp(text)
-        seen = set()
-        kws = []
-        for token in doc:
-            if token.is_stop or token.is_punct or token.is_space: continue
-            lower = token.lemma_.lower()
-            if lower in STOP_SKILLS: continue
-            if token.pos_ in ("NOUN", "PROPN") or lower in tech_keywords:
-                if lower not in seen and len(lower) > 1:
-                    seen.add(lower)
-                    kws.append(lower)
-        for chunk in doc.noun_chunks:
-            chunk_text = chunk.text.lower().strip()
-            if chunk_text.startswith("a "): chunk_text = chunk_text[2:]
-            if chunk_text.startswith("an "): chunk_text = chunk_text[3:]
-            if chunk_text.startswith("the "): chunk_text = chunk_text[4:]
-            if chunk_text in STOP_SKILLS: continue
-            if chunk_text not in seen and len(chunk_text.split()) > 1:
-                if not any(stop in chunk_text.split() for stop in STOP_SKILLS):
-                    seen.add(chunk_text)
-                    kws.append(chunk_text)
-        return kws
-
-    req_kws = _extract_from_text(required_text)
-    pref_kws = _extract_from_text(preferred_text)
-    all_kws = list(dict.fromkeys(req_kws + pref_kws))
-
-    # If parsing failed to find explicitly labeled required skills, fallback to treating all as required
-    if not req_kws and all_kws:
-        req_kws = all_kws
-
-    print(f"  → Extracted {len(req_kws)} Required, {len(pref_kws)} Preferred keywords.")
-    return {"required": req_kws, "preferred": pref_kws, "all": all_kws}
-
-
-# =====================================================================
-#  2. Skill Matching
-# =====================================================================
-def compute_skill_match(
-    resume_skills: list[str],
-    jd_keywords: list[str],
-    raw_text: str = "",
-) -> tuple[list[str], list[str]]:
-    """Compare resume skills against JD keywords (case-insensitive).
-
-    Uses two strategies:
-    1. Match JD keywords against the parsed skills list.
-    2. Fallback: if not found in parsed skills, check if the keyword
-       appears anywhere in the raw resume text.  This prevents
-       disagreement between matched_skills and explanation text.
-    """
-    import re
-    resume_lower: list[str] = [s.lower().strip() for s in resume_skills if s.strip()]
-    jd_lower: list[str] = [kw.lower().strip() for kw in jd_keywords if kw.strip()]
-    raw_lower = raw_text.lower() if raw_text else ""
-
-    matched: list[str] = []
-    missing: list[str] = []
-    for kw in jd_lower:
-        found = False
-        # Strategy 1: check parsed skills list
-        for skill in resume_lower:
-            pattern = rf"\b{re.escape(kw)}\b"
-            if re.search(pattern, skill) or re.search(rf"\b{re.escape(skill)}\b", kw):
-                found = True
-                break
-        # Strategy 2: fallback — check raw resume text
-        if not found and raw_lower and len(kw) > 1:
-            try:
-                if re.search(rf"\b{re.escape(kw)}\b", raw_lower):
-                    found = True
-            except re.error:
-                pass
-        if found:
-            matched.append(kw)
-        else:
-            missing.append(kw)
-
-    # Deduplicate while preserving order
-    matched = list(dict.fromkeys(matched))
-    missing = list(dict.fromkeys(missing))
-
-    return matched, missing
-
-
-# =====================================================================
-#  MODE 1 — BM25 Scoring (corpus-relative)
-# =====================================================================
-def score_bm25(
-    resume_text: str,
-    jd_text: str,
-    resume_skills: list[str],
-) -> dict[str, Any]:
-    """Score a resume against a JD using BM25Okapi over pseudo-documents.
-
-    The resume is split into per-line pseudo-documents (each non-empty
-    line ≥15 chars becomes one document in the corpus).  This gives
-    BM25's IDF a real multi-document corpus to work with, rather than
-    a single-document corpus where IDF is meaningless.
-
-    The MAX score across all pseudo-documents represents how well the
-    best-matching section of the resume aligns with the JD.
-
-    Normalisation uses a fixed empirical ceiling (12.0) derived from
-    typical BM25 score ranges for short text segments.
-
-    Parameters
-    ----------
-    resume_text : str
-        Plain-text resume.
-    jd_text : str
-        Plain-text job description.
-    resume_skills : list[str]
-        Pre-extracted resume skills for skill matching.
-
-    Returns
-    -------
-    dict
-        Keys: ``score``, ``algo_used``, ``matched_skills``,
-        ``missing_skills``, ``explanation``.
-    """
-    try:
-        from rank_bm25 import BM25Okapi
-    except ImportError as exc:
-        return _error_result(
-            "bm25",
-            resume_skills,
-            jd_text,
-            f"rank-bm25 is not installed: {exc}",
-        )
-
-    print("  → Tokenizing with BM25…")
-
-    jd_tokens = _clean_tokens(jd_text)
-    if not jd_tokens:
-        return _error_result(
-            "bm25",
-            resume_skills,
-            jd_text,
-            "JD produced no tokens after cleaning.",
-        )
-
-    # Split resume into per-line pseudo-documents for a real BM25 corpus
-    pseudo_docs = []
-    for line in resume_text.split("\n"):
-        line = line.strip()
-        if len(line) >= 15:
-            tokens = _clean_tokens(line)
-            if tokens:
-                pseudo_docs.append(tokens)
-
-    if not pseudo_docs:
-        # Fallback: if no lines are long enough, use the whole resume as one doc
-        resume_tokens = _clean_tokens(resume_text)
-        if not resume_tokens:
-            return _error_result(
-                "bm25",
-                resume_skills,
-                jd_text,
-                "Resume produced no tokens after cleaning.",
-            )
-        pseudo_docs = [resume_tokens]
-
-    print(f"  → Building BM25 index ({len(pseudo_docs)}-doc corpus)…")
-    bm25 = BM25Okapi(pseudo_docs)
-    # Do NOT manually override IDF values — with a real corpus, IDF is meaningful
-
-    print("  → Scoring JD query against resume pseudo-docs…")
-    raw_scores = bm25.get_scores(jd_tokens)
-    # Take the MAX score: the best-matching section represents the resume
-    raw_score: float = float(max(raw_scores)) if len(raw_scores) > 0 else 0.0
-
-    # Normalise using a fixed empirical ceiling (increased to 25.0 to prevent easy 100%)
-    BM25_CEILING = 25.0
-    normalised = (raw_score / BM25_CEILING) * 100.0
-    normalised = round(min(max(normalised, 0.0), 100.0), 2)
-
-    # Top matching terms
-    all_resume_tokens = set()
-    for doc in pseudo_docs:
-        all_resume_tokens.update(doc)
-    top_terms = [t for t in jd_tokens if t in all_resume_tokens]
-    top_terms = list(dict.fromkeys(top_terms))[:15]
-
-    # Skill matching (with raw_text fallback)
-    jd_kws = extract_jd_keywords(jd_text)
-    req_kws = jd_kws["required"]
-    pref_kws = jd_kws["preferred"]
-
-    req_matched, req_missing = compute_skill_match(resume_skills, req_kws, raw_text=resume_text)
-    pref_matched, pref_missing = compute_skill_match(resume_skills, pref_kws, raw_text=resume_text)
-
-    # Skill score calculation:
-    # If preferred keywords exist   → 40% req + 20% pref + 20% semantic (total 80)
-    # If NO preferred keywords exist → 60% req + 0% pref + 20% semantic (total 80)
-    # This prevents giving free 20/20 points when JD has no preferred section.
-    if req_kws and pref_kws:
-        req_score  = 40.0 * min(1.0, len(req_matched) / len(req_kws))
-        pref_score = 20.0 * min(1.0, len(pref_matched) / len(pref_kws))
-    elif req_kws:
-        req_score  = 60.0 * min(1.0, len(req_matched) / len(req_kws))
-        pref_score = 0.0
-    else:
-        req_score  = 60.0
-        pref_score = 0.0
-    semantic_score = normalised * 0.20
-    
-    partial_score = req_score + pref_score + semantic_score
-
-    explanation = (
-        f"BM25 semantic: {normalised:.1f}/100. "
-        f"Required skills missing ({len(req_missing)}): -{len(req_missing)*7}pts. "
-        f"Preferred skills missing ({len(pref_missing)}): -{len(pref_missing)*2}pts. "
-    )
-
-    print(f"  → BM25 Partial Score (out of 80): {partial_score:.1f}")
-    return {
-        "score": partial_score,  # This is out of 80 right now
-        "semantic_score": normalised,
-        "req_score": req_score,
-        "pref_score": pref_score,
-        "algo_used": "bm25",
-        "matched_skills": req_matched + pref_matched,
-        "missing_skills": req_missing + pref_missing,
-        "explanation": explanation,
-    }
-
-
-# =====================================================================
-#  MODE 2 — Neural (SBERT) Scoring
-# =====================================================================
-def score_neural(
-    resume_text: str,
-    jd_text: str,
-    resume_skills: list[str],
-    device: str = "cpu",
-    hyre_text: str = "",
-) -> dict[str, Any]:
-    """Score a resume against a JD using SBERT cosine similarity.
-
-    Uses ``all-MiniLM-L6-v2`` from sentence-transformers.  The model is
-    lazy-loaded and cached at module level.
-
-    Parameters
-    ----------
-    resume_text : str
-        Plain-text resume.
-    jd_text : str
-        Plain-text job description.
-    resume_skills : list[str]
-        Pre-extracted resume skills for skill matching.
-    device : str, optional
-        Torch device for model loading **and** encoding (default ``'cpu'``).
-    hyre_text : str, optional
-        Hypothetical resume text to expand the job description representation.
-
-    Returns
-    -------
-    dict
-        Standard result dict.
-    """
-    try:
-        from sentence_transformers import util as st_util
-    except ImportError as exc:
-        return _error_result(
-            "neural",
-            resume_skills,
-            jd_text,
-            f"sentence-transformers is not installed: {exc}",
-        )
-
-    print("  → Loading SBERT model…")
-    model = _get_sbert_model(device)
-
-    print("  → Encoding resume and JD with SBERT…")
-    
-    # Split resume into chunks (sentences/lines) rather than one massive vector
-    import torch
-    resume_sentences = [s.strip() for s in resume_text.split('\n') if len(s.strip()) > 15]
-    if not resume_sentences:
-        resume_sentences = [resume_text]
-        
+def _encode(texts: list[str], model=None) -> np.ndarray:
+    """Batch encode a list of texts. Returns (N, 384) normalized array."""
+    m = model or _get_model()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        resume_embs = model.encode(resume_sentences, convert_to_tensor=True, device=device)
-        # Apply HYRE expansion if present
-        effective_jd = jd_text
-        if hyre_text:
-            effective_jd = f"{jd_text}\n\n[HYPOTHETICAL IDEAL RESUME REFERENCE]\n{hyre_text}"
-        jd_emb = model.encode(effective_jd, convert_to_tensor=True, device=device)
+        return m.encode(
+            texts,
+            batch_size=32,
+            normalize_embeddings=True,
+            device=DEVICE,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+        )
 
-    print("  → Computing cosine similarity…")
-    # Compute similarity between JD and every resume chunk
-    cosine_sims = st_util.cos_sim(jd_emb, resume_embs)[0]
-    
-    # Take the top K similarities to reward dense relevant sections
-    k = min(5, len(cosine_sims))
-    top_k_sims = torch.topk(cosine_sims, k=k).values
-    cosine_sim = float(torch.mean(top_k_sims))
-    
-    # Calibrate score: raw cosine similarity rarely goes above 0.5 for different texts
-    # We stretch the range [0.15, 0.5] -> [0, 100]
-    normalised = max(0.0, (cosine_sim - 0.15) / 0.35) * 100.0
-    normalised = round(min(normalised, 100.0), 2)
 
-    jd_kws = extract_jd_keywords(jd_text)
-    req_kws = jd_kws["required"]
-    pref_kws = jd_kws["preferred"]
+# ── Confidence Tier System ────────────────────────────────────────────────────
 
-    req_matched, req_missing = compute_skill_match(resume_skills, req_kws, raw_text=resume_text)
-    pref_matched, pref_missing = compute_skill_match(resume_skills, pref_kws, raw_text=resume_text)
+TIERS = [
+    (95, "Exceptional Match",  "Strongly Recommend",    "Interview immediately"),
+    (85, "Strong Match",       "Recommend",             "Strong technical fit"),
+    (70, "Good Match",         "Recommend with Notes",  "Most requirements met"),
+    (55, "Potential Match",    "Further Review",        "Partial requirements met"),
+    (40, "Moderate Match",     "Hold for Review",       "Some transferable skills"),
+    (25, "Weak Match",         "Not Recommended",       "Significant gaps"),
+    (0,  "Poor Match",         "Do Not Proceed",        "Does not meet requirements"),
+]
 
-    # Skill score: no free preferred points when JD has no preferred section
-    if req_kws and pref_kws:
-        req_score  = 40.0 * min(1.0, len(req_matched) / len(req_kws))
-        pref_score = 20.0 * min(1.0, len(pref_matched) / len(pref_kws))
-    elif req_kws:
-        req_score  = 60.0 * min(1.0, len(req_matched) / len(req_kws))
-        pref_score = 0.0
-    else:
-        req_score  = 60.0
-        pref_score = 0.0
-    semantic_score = normalised * 0.20
-    
-    partial_score = req_score + pref_score + semantic_score
 
-    explanation = (
-        f"SBERT semantic: {normalised:.1f}/100. "
-        f"Required skills missing ({len(req_missing)}). "
-        f"Preferred skills missing ({len(pref_missing)}). "
+def get_tier(score: float) -> dict:
+    for threshold, label, recommendation, note in TIERS:
+        if score >= threshold:
+            return {
+                "label":          label,
+                "recommendation": recommendation,
+                "note":           note,
+                "threshold":      threshold,
+            }
+    return {"label": "Poor Match", "recommendation": "Do Not Proceed", "note": "Does not meet requirements", "threshold": 0}
+
+
+# ── Skill Synonym Map ─────────────────────────────────────────────────────────
+
+SKILL_SYNONYMS: dict[str, list[str]] = {
+    "javascript":       ["javascript", "js", "ecmascript"],
+    "typescript":       ["typescript", "ts"],
+    "python":           ["python", "py", "django", "flask", "fastapi"],
+    "java":             ["java", "spring boot", "spring", "maven", "gradle", "jvm"],
+    "c++":              ["c++", "cpp", "c plus plus"],
+    "c#":               ["c#", "csharp", ".net", "dotnet", "asp.net"],
+    "rust":             ["rust", "tokio", "cargo", "rustlang", "async rust", "serde",
+                         "actix", "axum", "wasm", "webassembly"],
+    "async":            ["async", "asynchronous", "tokio", "async/await", "concurrency",
+                         "concurrent", "threading", "parallelism"],
+    "systems":          ["systems programming", "systems", "embedded", "os", "kernel",
+                         "memory management", "memory safety", "zero-cost", "ffi",
+                         "low-level", "performance-critical"],
+    "go":               ["go", "golang", "goroutine"],
+    "kotlin":           ["kotlin", "coroutines"],
+    "swift":            ["swift", "swiftui", "xcode"],
+    "ruby":             ["ruby", "rails", "ruby on rails"],
+    "php":              ["php", "laravel", "symfony"],
+    "react":            ["react", "reactjs", "react.js", "react native", "nextjs", "next.js"],
+    "vue":              ["vue", "vuejs", "vue.js", "nuxt"],
+    "angular":          ["angular", "angularjs"],
+    "node.js":          ["node.js", "nodejs", "express.js", "fastify", "nestjs"],
+    "machine learning": ["machine learning", "ml", "machinelearning", "sklearn",
+                         "scikit-learn", "scikit learn"],
+    "deep learning":    ["deep learning", "dl", "neural network", "pytorch",
+                         "tensorflow", "keras"],
+    "llm":              ["llm", "large language model", "gpt", "claude", "gemini",
+                         "generative ai", "genai", "openai", "rag", "vector"],
+    "nlp":              ["nlp", "natural language processing", "spacy", "nltk",
+                         "huggingface", "bert", "transformers", "sentence transformer",
+                         "sbert", "bm25", "embedding"],
+    "computer vision":  ["computer vision", "cv", "opencv", "image processing",
+                         "object detection", "yolo"],
+    "sql":              ["sql", "mysql", "postgresql", "postgres", "sqlite",
+                         "oracle", "tsql", "mssql", "database"],
+    "nosql":            ["nosql", "mongodb", "cassandra", "dynamodb", "redis",
+                         "couchdb", "firestore"],
+    "aws":              ["aws", "amazon web services", "ec2", "s3", "lambda",
+                         "rds", "cloudfront", "sagemaker"],
+    "gcp":              ["gcp", "google cloud", "bigquery", "gke", "cloud run", "vertex ai"],
+    "azure":            ["azure", "microsoft azure", "azure devops", "azure ml"],
+    "docker":           ["docker", "container", "dockerfile", "podman", "containerization"],
+    "kubernetes":       ["kubernetes", "k8s", "kubectl", "helm", "k3s", "openshift"],
+    "ci/cd":            ["ci/cd", "cicd", "github actions", "jenkins", "gitlab ci",
+                         "travis", "circleci", "pipeline"],
+    "git":              ["git", "github", "gitlab", "bitbucket", "version control"],
+    "linux":            ["linux", "unix", "bash", "shell", "ubuntu", "debian",
+                         "centos", "rhel", "posix"],
+    "rest api":         ["rest", "restful", "rest api", "http api", "openapi",
+                         "swagger", "api design"],
+    "graphql":          ["graphql", "graph ql", "apollo"],
+    "microservices":    ["microservices", "micro services", "service mesh",
+                         "kafka", "rabbitmq", "event driven"],
+    "devops":           ["devops", "sre", "infrastructure", "terraform", "ansible",
+                         "puppet", "chef", "iac"],
+    "agile":            ["agile", "scrum", "kanban", "jira", "sprint"],
+    "solana":           ["solana", "anchor", "spl token", "solana web3",
+                         "solana rpc", "solana program"],
+    "blockchain":       ["blockchain", "web3", "ethereum", "solidity",
+                         "smart contract", "defi", "dapp", "nft", "x402"],
+    "testing":          ["unit testing", "integration testing", "pytest", "jest",
+                         "junit", "tdd", "test driven"],
+    "data structures":  ["data structures", "algorithms", "dsa", "leetcode",
+                         "competitive programming"],
+    "open source":      ["open source", "opensource", "github contribution",
+                         "open-source", "contributor", "maintainer"],
+}
+
+# Build reverse lookup: alias → canonical
+_ALIAS_MAP: dict[str, str] = {}
+for _canonical, _aliases in SKILL_SYNONYMS.items():
+    for _alias in _aliases:
+        _ALIAS_MAP[_alias.lower()] = _canonical
+
+
+def _normalise(skill: str) -> str:
+    return _ALIAS_MAP.get(skill.strip().lower(), skill.strip().lower())
+
+
+def _skill_present(skill: str, text_lower: str, skill_set: set[str]) -> bool:
+    """Check skill against resume text + skill set, with full synonym expansion."""
+    key = skill.lower().strip()
+    canonical = _normalise(key)
+
+    # Direct check
+    if key in skill_set or canonical in skill_set:
+        return True
+    if key in text_lower or canonical in text_lower:
+        return True
+
+    # Expand all aliases
+    for alias in SKILL_SYNONYMS.get(canonical, [key]):
+        if alias in text_lower:
+            return True
+    # Also check all aliases of the raw key (if it has its own list)
+    for alias in SKILL_SYNONYMS.get(key, []):
+        if alias in text_lower:
+            return True
+    return False
+
+
+# ── Stop Words ────────────────────────────────────────────────────────────────
+
+_STOP = {
+    "a","an","the","and","or","but","in","on","at","to","for","of","with",
+    "is","are","was","be","has","have","we","you","your","our","their","will",
+    "can","must","should","may","not","strong","good","excellent","great",
+    "experience","knowledge","skills","ability","understanding","proficiency",
+    "familiarity","working","minimum","preferred","required","years","year",
+    "plus","bonus","join","team","work","company","candidate","role","position",
+    "job","looking","seeking","ideal","responsibilities","including","using",
+    "comfortable","demonstrated","proven","track","record",
+}
+
+_MULTI_SKILLS = sorted(
+    [c for c in SKILL_SYNONYMS if " " in c] +
+    [a for aliases in SKILL_SYNONYMS.values() for a in aliases if " " in a],
+    key=len, reverse=True,
+)
+
+
+# ── JD Keyword Extraction ─────────────────────────────────────────────────────
+
+def extract_jd_keywords(jd_text: str) -> dict:
+    """
+    Extract required and preferred skill keywords from a Job Description.
+    Returns {"required": [...], "preferred": [...], "all": [...]}.
+    """
+    jd_lower = jd_text.lower()
+
+    # Multi-word first (longest match)
+    found_multi = [t for t in _MULTI_SKILLS if t in jd_lower]
+
+    # Single token extraction
+    words = re.findall(r"\b[a-zA-Z][a-zA-Z0-9#+.\-]{1,30}\b", jd_text)
+    single = [
+        w.lower() for w in words
+        if w.lower() not in _STOP and len(w) > 2
+        and not any(w.lower() in m for m in found_multi)
+    ]
+    all_kws = list(dict.fromkeys(found_multi + single))[:60]
+
+    # Detect req / preferred sections
+    req_m  = re.search(
+        r"(?:requirements?|must.have|required|mandatory|qualifications?)[:\n](.*?)"
+        r"(?:preferred|nice.to.have|bonus|responsibilities|\Z)",
+        jd_lower, re.DOTALL | re.IGNORECASE,
+    )
+    pref_m = re.search(
+        r"(?:preferred|nice.to.have|bonus|plus)[:\n](.*?)(?:\Z)",
+        jd_lower, re.DOTALL | re.IGNORECASE,
     )
 
-    print(f"  → Neural Partial Score (out of 80): {partial_score:.1f}")
+    req_text  = req_m.group(1)  if req_m  else jd_lower
+    pref_text = pref_m.group(1) if pref_m else ""
+
+    required  = list(dict.fromkeys(k for k in all_kws if k in req_text ))[:30]
+    preferred = list(dict.fromkeys(k for k in all_kws if k in pref_text))[:15]
+
+    # Canonical dedup for required
+    seen: set[str] = set()
+    req_deduped = []
+    for k in required:
+        c = _normalise(k)
+        if c not in seen:
+            seen.add(c)
+            req_deduped.append(k)
+
+    return {"required": req_deduped, "preferred": preferred, "all": all_kws}
+
+
+# ── Helper: project text list ─────────────────────────────────────────────────
+
+def _build_project_texts(projects: list, raw_text: str) -> list[str]:
+    """Extract a list of project text strings from structured or raw data."""
+    texts = []
+    for proj in projects:
+        if isinstance(proj, dict):
+            pt = f"{proj.get('name','')} {proj.get('description','')}"
+            techs = proj.get("technologies") or proj.get("tech") or []
+            if isinstance(techs, list):
+                pt += " " + " ".join(techs)
+        elif isinstance(proj, str):
+            pt = proj
+        else:
+            continue
+        if pt.strip():
+            texts.append(pt.strip())
+
+    if not texts:
+        m = re.search(
+            r"(?i)(?:projects?|portfolio)[:\n](.*?)(?:education|experience|skills|certif|\Z)",
+            raw_text, re.DOTALL,
+        )
+        if m:
+            texts = [s.strip() for s in m.group(1).split("\n") if len(s.strip()) > 20]
+    return texts
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 1 — Required Skill Match (35%)
+# WITH EVIDENCE MULTIPLIER: skills proven in projects count 1.5×
+# ═══════════════════════════════════════════════════════════════
+
+def _c1_required_skills(
+    skills: list[str],
+    raw_text: str,
+    projects: list,
+    jd_kw: dict,
+) -> dict:
+    """
+    Score: 0–100.
+    Evidence multiplier: if a required skill appears in N projects,
+    it gets a weight of (1 + 0.5*N) instead of 1.
+    This ensures 'Rust in 4 projects' >> 'Rust in skills list only'.
+    """
+    required  = jd_kw.get("required",  [])
+    preferred = jd_kw.get("preferred", [])
+
+    if not required:
+        required = jd_kw.get("all", [])[:20]
+
+    skill_lower = {s.lower() for s in skills}
+    text_lower  = raw_text.lower()
+
+    # Build project texts for evidence counting
+    proj_texts = [pt.lower() for pt in _build_project_texts(projects, raw_text)]
+
+    matched_req = []
+    missing_req = []
+    evidence_weights: dict[str, float] = {}
+
+    for kw in required:
+        if _skill_present(kw, text_lower, skill_lower):
+            matched_req.append(kw)
+            # Count how many projects demonstrate this skill
+            proj_count = sum(
+                1 for pt in proj_texts if _skill_present(kw, pt, set())
+            )
+            # Evidence multiplier: base 1.0 + 0.5 per project (uncapped)
+            evidence_weights[kw] = 1.0 + (proj_count * 0.5)
+        else:
+            missing_req.append(kw)
+            evidence_weights[kw] = 0.0
+
+    total_required = max(1, len(required))
+
+    # Simple ratio (base signal)
+    req_ratio = len(matched_req) / total_required
+
+    # Evidence-boosted ratio
+    # If all required skills are in 2 projects each → max weight = len(req) * 2.0
+    evidence_sum  = sum(evidence_weights.values())
+    max_possible  = total_required * 2.0
+    evidence_ratio = evidence_sum / max_possible
+
+    # Combined score: 55% evidence-boosted + 45% simple ratio
+    # This rewards proven depth over breadth of mention
+    combined_ratio = (evidence_ratio * 0.55) + (req_ratio * 0.45)
+    base = combined_ratio * 100.0
+
+    # Preferred skills bonus (up to +15)
+    matched_pref = [k for k in preferred if _skill_present(k, text_lower, skill_lower)]
+    pref_ratio   = len(matched_pref) / max(1, len(preferred)) if preferred else 0.5
+    pref_bonus   = pref_ratio * 15.0
+
+    score = min(100.0, base + pref_bonus)
+
+    # Hard cap for very poor match
+    if req_ratio < 0.20:
+        score = min(score, 30.0)
+
     return {
-        "score": partial_score,
-        "semantic_score": normalised,
-        "req_score": req_score,
-        "pref_score": pref_score,
-        "algo_used": "neural",
-        "matched_skills": req_matched + pref_matched,
-        "missing_skills": req_missing + pref_missing,
-        "explanation": explanation,
+        "score":           round(score, 1),
+        "matched":         matched_req + matched_pref,
+        "missing":         missing_req,
+        "req_ratio":       round(req_ratio, 3),
+        "matched_count":   len(matched_req),
+        "total_required":  total_required,
+        "evidence_weights": evidence_weights,
     }
 
 
-# =====================================================================
-#  MODE 3 — Hybrid (BM25 40 % + SBERT 60 %)
-# =====================================================================
-def score_hybrid(
-    resume_text: str,
-    jd_text: str,
-    resume_skills: list[str],
-    device: str = "cpu",
-    hyre_text: str = "",
-) -> dict[str, Any]:
-    """Score a resume using a weighted hybrid of BM25 and SBERT.
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 2 — Project Evidence (25%)
+# KEYWORD-FIRST: required skills found in projects dominate.
+# SBERT is secondary (helps for semantic proximity of descriptions).
+# ═══════════════════════════════════════════════════════════════
 
-    ``final = (bm25_norm × 0.4 + sbert_norm × 0.6) × 100``
-
-    Parameters
-    ----------
-    resume_text, jd_text, resume_skills, device
-        Same as the individual scorers.
-    hyre_text
-        Hypothetical resume text to expand the job description representation.
-
-    Returns
-    -------
-    dict
-        Standard result dict.
+def _c2_project_evidence(
+    projects: list,
+    raw_text: str,
+    jd_kw: dict,
+    jd_emb: np.ndarray,
+    model,
+) -> dict:
     """
-    print("  → Running hybrid scoring (BM25 40 % + SBERT 60 %)…")
+    Score: 0–100.
+    Primary signal: how many required JD skills does each project demonstrate?
+    Secondary signal: SBERT similarity of project description to JD.
 
-    # ── BM25 component ──────────────────────────────────────────────
-    print("  → [Hybrid] Computing BM25 component…")
-    bm25_result = score_bm25(resume_text, jd_text, resume_skills)
-    bm25_norm = bm25_result["semantic_score"] / 100.0  # 0-1
-
-    # ── SBERT component ─────────────────────────────────────────────
-    print("  → [Hybrid] Computing SBERT component…")
-    neural_result = score_neural(resume_text, jd_text, resume_skills, device=device, hyre_text=hyre_text)
-    sbert_norm = neural_result["semantic_score"] / 100.0  # 0-1
-
-    # ── Combine ─────────────────────────────────────────────────────
-    semantic_score_norm = (bm25_norm * 0.4 + sbert_norm * 0.6) * 100.0
-    
-    # We use the neural_result's skill extraction logic since it's the same
-    req_score = neural_result["req_score"]
-    pref_score = neural_result["pref_score"]
-    semantic_score = semantic_score_norm * 0.20
-    
-    partial_score = req_score + pref_score + semantic_score
-    partial_score = round(min(max(partial_score, 0.0), 80.0), 2)
-
-    explanation = (
-        f"Hybrid semantic: {semantic_score_norm:.1f}/100. "
-        f"Required skills missing: -{(40.0 - req_score):.0f}pts. "
-        f"Preferred skills missing: -{(20.0 - pref_score):.0f}pts. "
+    A project using 3+ required skills = strong evidence (high score).
+    Multiple such projects = stacking bonus.
+    """
+    required_skills = jd_kw.get("required",  [])
+    all_jd_terms    = set(
+        k.lower() for k in jd_kw.get("required", []) + jd_kw.get("preferred", [])
     )
 
-    print(f"  → Hybrid Partial Score (out of 80): {partial_score:.1f}")
+    proj_texts = _build_project_texts(projects, raw_text)
+
+    if not proj_texts:
+        return {"score": 12.0, "detail": "no_projects_found"}
+
+    # Encode project texts for SBERT (secondary signal)
+    proj_embs = _encode(proj_texts, model)
+
+    proj_scores: list[float] = []
+    for i, ptext in enumerate(proj_texts):
+        plow = ptext.lower()
+
+        # ── PRIMARY: keyword evidence ──────────────────────────────────────
+        # Count required JD skills demonstrated in this project
+        req_hits  = sum(1 for r in required_skills if _skill_present(r, plow, set()))
+        req_ratio = req_hits / max(1, len(required_skills))
+        # Amplify: 33% of required skills → 100 score (generous)
+        keyword_score = min(100.0, req_ratio * 300.0)
+
+        # Count any JD terms (preferred + required)
+        any_hits  = sum(1 for t in all_jd_terms if t in plow)
+        any_ratio = any_hits / max(1, len(all_jd_terms))
+        any_score = min(80.0, any_ratio * 400.0)
+
+        # Take the better of the two keyword signals
+        kw_score = max(keyword_score, any_score)
+
+        # ── SECONDARY: SBERT semantic ──────────────────────────────────────
+        sem_raw   = float(np.dot(proj_embs[i], jd_emb))
+        sem_score = _sigmoid_calibrate(sem_raw)
+
+        # 65% keyword evidence + 35% semantic
+        combined = (kw_score * 0.65) + (sem_score * 0.35)
+        proj_scores.append(combined)
+
+    if not proj_scores:
+        return {"score": 12.0, "detail": "empty_project_texts"}
+
+    max_s = max(proj_scores)
+    avg_s = sum(proj_scores) / len(proj_scores)
+
+    # Count strong-evidence projects (score > 35)
+    strong = sum(1 for s in proj_scores if s > 35)
+    # Stacking bonus for multiple relevant projects
+    stack_bonus = min(18.0, (strong - 1) * 6.0) if strong > 1 else 0.0
+
+    final = (max_s * 0.60 + avg_s * 0.40) + stack_bonus
     return {
-        "score": partial_score,
-        "semantic_score": semantic_score_norm,
-        "req_score": req_score,
-        "pref_score": pref_score,
-        "algo_used": "hybrid_efficient",
-        "matched_skills": neural_result["matched_skills"],
-        "missing_skills": neural_result["missing_skills"],
-        "explanation": explanation,
+        "score":          round(min(100.0, final), 1),
+        "project_scores": [round(s, 1) for s in proj_scores],
+        "strong_count":   strong,
     }
 
 
-# =====================================================================
-#  MODE 4 — ColBERT Scoring
-# =====================================================================
-def score_colbert(
-    resume_text: str,
-    jd_text: str,
-    resume_skills: list[str],
-) -> dict[str, Any]:
-    """Score a resume against a JD using ColBERT late-interaction retrieval.
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 3 — Semantic Alignment (10%)
+# RECALIBRATED: midpoint=0.30, k=15
+# Maps real-world resume↔JD cosines to a meaningful 0–100 range.
+# ═══════════════════════════════════════════════════════════════
 
-    Uses ``ragatouille`` with the
-    ``answerdotai/answerai-colbert-small-v1`` model.  If ragatouille is
-    not installed the function returns a graceful error result with
-    ``score=0``.
-
-    Parameters
-    ----------
-    resume_text : str
-        Plain-text resume.
-    jd_text : str
-        Plain-text job description.
-    resume_skills : list[str]
-        Pre-extracted resume skills for skill matching.
-
-    Returns
-    -------
-    dict
-        Standard result dict.
+def _sigmoid_calibrate(raw_cosine: float) -> float:
     """
-    try:
-        from ragatouille import RAGPretrainedModel
-    except ImportError:
-        return _error_result(
-            "colbert",
-            resume_skills,
-            jd_text,
-            (
-                "ragatouille is not installed.  "
-                "Install it with:  pip install ragatouille"
-            ),
-        )
+    Sigmoid calibration for MiniLM cosine similarity → 0–100.
 
-    try:
-        print("  → Loading ColBERT model (answerai-colbert-small-v1)…")
-        rag = RAGPretrainedModel.from_pretrained(
-            "answerdotai/answerai-colbert-small-v1"
-        )
+    Observed real-world cosine ranges (MiniLM, resume vs. JD, same domain):
+      0.18  → very weak match   → calibrated  ~16%
+      0.28  → weak match        → calibrated  ~44%
+      0.36  → decent match      → calibrated  ~71%
+      0.50  → strong match      → calibrated  ~95%
 
-        # ragatouille needs a writable index directory
-        index_dir = os.path.join(tempfile.gettempdir(), "hireflow_colbert_index")
-        os.makedirs(index_dir, exist_ok=True)
-
-        print("  → Indexing resume text with ColBERT…")
-        rag.index(
-            collection=[resume_text],
-            index_name="resume_index",
-            max_document_length=512,
-            split_documents=True,
-        )
-
-        print("  → Querying index with JD…")
-        results = rag.search(query=jd_text, k=1)
-
-        if results and len(results) > 0:
-            raw_score = float(results[0].get("score", 0.0))
-        else:
-            raw_score = 0.0
-
-        normalised = (raw_score / 150.0) * 100.0
-        normalised = round(min(max(normalised, 0.0), 100.0), 2)
-
-        jd_kws = extract_jd_keywords(jd_text)
-        req_kws = jd_kws["required"]
-        pref_kws = jd_kws["preferred"]
-
-        req_matched, req_missing = compute_skill_match(resume_skills, req_kws, raw_text=resume_text)
-        pref_matched, pref_missing = compute_skill_match(resume_skills, pref_kws, raw_text=resume_text)
-
-        # Skill score calculation:
-        # If preferred keywords exist   → 40% req + 20% pref + 20% semantic (total 80)
-        # If NO preferred keywords exist → 60% req + 0% pref + 20% semantic (total 80)
-        if req_kws and pref_kws:
-            req_score  = 40.0 * min(1.0, len(req_matched) / len(req_kws))
-            pref_score = 20.0 * min(1.0, len(pref_matched) / len(pref_kws))
-        elif req_kws:
-            req_score  = 60.0 * min(1.0, len(req_matched) / len(req_kws))
-            pref_score = 0.0
-        else:
-            req_score  = 60.0
-            pref_score = 0.0
-        semantic_score = normalised * 0.20
-        
-        partial_score = req_score + pref_score + semantic_score
-
-        explanation = (
-            f"ColBERT semantic: {normalised:.1f}/100. "
-            f"Required skills missing ({len(req_missing)}): -{len(req_missing)*7}pts. "
-            f"Preferred skills missing ({len(pref_missing)}): -{len(pref_missing)*2}pts. "
-        )
-
-        print(f"  → ColBERT Partial Score (out of 80): {partial_score:.1f}")
-        return {
-            "score": partial_score,
-            "semantic_score": normalised,
-            "req_score": req_score,
-            "pref_score": pref_score,
-            "algo_used": "colbert",
-            "matched_skills": req_matched + pref_matched,
-            "missing_skills": req_missing + pref_missing,
-            "explanation": explanation,
-        }
-
-    except Exception as exc:
-        return _error_result(
-            "colbert",
-            resume_skills,
-            jd_text,
-            f"ColBERT scoring failed: {exc}",
-        )
+    sigmoid: k=15, midpoint=0.30
+      score = 1 / (1 + exp(-15*(cosine - 0.30))) * 100
+    """
+    k, mid = 15.0, 0.30
+    return round(100.0 / (1.0 + math.exp(-k * (raw_cosine - mid))), 1)
 
 
-# =====================================================================
-#  Dispatcher
-# =====================================================================
-_ALGO_MAP: dict[str, str] = {
-    "bm25": "score_bm25",
-    "neural": "score_neural",
-    "hybrid_efficient": "score_hybrid",
-    "colbert": "score_colbert",
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 4 — Experience Relevance (10%)
+# ═══════════════════════════════════════════════════════════════
+
+_SENIORITY: dict[str, list[str]] = {
+    "entry": ["entry level", "0-1 year", "fresh", "fresher", "junior", "intern", "trainee"],
+    "mid":   ["2 year", "3 year", "mid level", "intermediate", "associate", "2-3", "2-4"],
+    "senior":["senior", "5 year", "4 year", "sr.", "3-5", "4-6", "5+", "lead developer"],
+    "lead":  ["lead", "principal", "staff", "architect", "manager", "10+", "director"],
+}
+
+_DOMAINS: dict[str, list[str]] = {
+    "systems":    ["kernel", "memory management", "os", "syscall", "embedded", "firmware",
+                   "driver", "concurrency", "threading", "posix", "zero-copy", "unsafe"],
+    "web":        ["frontend", "backend", "full stack", "html", "css", "browser", "spa",
+                   "ssr", "seo", "web performance"],
+    "data":       ["data pipeline", "etl", "bigquery", "spark", "hadoop", "warehouse",
+                   "dbt", "airflow", "data engineering"],
+    "ml":         ["model training", "dataset", "inference", "experiment", "jupyter",
+                   "colab", "gpu training", "fine-tuning", "prompt", "embedding"],
+    "devops":     ["deployment", "monitoring", "observability", "helm", "ci/cd",
+                   "sre", "incident", "on-call", "uptime"],
+    "mobile":     ["ios", "android", "flutter", "react native", "swift", "kotlin"],
+    "blockchain": ["wallet", "smart contract", "dapp", "defi", "nft", "web3",
+                   "solana", "ethereum", "anchor"],
+    "security":   ["security", "vulnerability", "penetration", "cve", "owasp",
+                   "encryption", "authentication"],
 }
 
 
-def run_ats(
-    resume_text: str,
-    jd_text: str,
-    resume_skills: list[str],
-    algo: str = "hybrid_efficient",
-    device: str = "cpu",
-    hyre_text: str = "",
-) -> dict[str, Any]:
-    """Dispatch to the requested ATS scoring algorithm.
+def _c4_experience(raw_text: str, jd_text: str, projects: list) -> dict:
+    """Score: 0–100. Seniority alignment + domain expertise match."""
+    text_l = raw_text.lower()
+    jd_l   = jd_text.lower()
 
-    Parameters
-    ----------
-    resume_text : str
-        Plain-text resume content.
-    jd_text : str
-        Plain-text job description.
-    resume_skills : list[str]
-        Skills pre-extracted from the resume.
-    algo : str, optional
-        Algorithm name — one of ``'bm25'``, ``'neural'``,
-        ``'hybrid_efficient'``, ``'colbert'`` (default ``'hybrid_efficient'``).
-    device : str, optional
-        Torch device string (default ``'cpu'``).
-    hyre_text : str, optional
-        Hypothetical resume text to expand the job description representation.
+    # Detect JD seniority level
+    jd_level = "mid"
+    for lvl, patterns in _SENIORITY.items():
+        if any(p in jd_l for p in patterns):
+            jd_level = lvl
+            break
 
-    Returns
-    -------
-    dict
-        Keys: ``score``, ``algo_used``, ``matched_skills``,
-        ``missing_skills``, ``explanation``.
+    has_senior = any(p in text_l for p in _SENIORITY["senior"] + _SENIORITY["lead"])
+    has_mid    = any(p in text_l for p in _SENIORITY["mid"])
+    proj_count = len(projects) if projects else len(re.findall(r"(?i)\bproject\b", text_l))
 
-    Raises
-    ------
-    ValueError
-        If ``algo`` is not a recognised algorithm name.
-    """
-    algo_key = algo.lower().strip()
-    if algo_key not in _ALGO_MAP:
-        supported = ", ".join(sorted(_ALGO_MAP.keys()))
-        raise ValueError(
-            f"Unknown algorithm '{algo}'. Supported: {supported}"
-        )
+    seniority_score = {
+        "entry": 75 if not has_senior else 55,
+        "mid":   80 if (has_mid or has_senior) else (65 if proj_count >= 2 else 45),
+        "senior":85 if has_senior else (72 if proj_count >= 3 else 50),
+        "lead":  80 if has_senior else 55,
+    }.get(jd_level, 60)
 
-    print(f"\n{'=' * 60}")
-    print(f"  ATS Engine — algorithm: {algo_key}")
-    print(f"{'=' * 60}")
+    # Domain match
+    domain_score = 0.0
+    for domain, signals in _DOMAINS.items():
+        jd_hits = sum(1 for s in signals if s in jd_l)
+        if jd_hits >= 2:
+            res_hits    = sum(1 for s in signals if s in text_l)
+            domain_score = max(domain_score, min(100.0, res_hits / len(signals) * 150.0))
 
-    # Resolve function reference
-    fn_name = _ALGO_MAP[algo_key]
-    fn = globals()[fn_name]
-
-    # Functions that accept a device parameter and optionally hyre_text
-    if algo_key in ("neural", "hybrid_efficient"):
-        result = fn(resume_text, jd_text, resume_skills, device=device, hyre_text=hyre_text)
-    else:
-        result = fn(resume_text, jd_text, resume_skills)
-
-    print(f"\n  ✓ ATS scoring complete — {result['score']}/100 ({algo_key})")
-    print(f"{'=' * 60}\n")
-    return result
-
-
-# =====================================================================
-#  Internal helpers
-# =====================================================================
-def _clean_tokens(text: str) -> list[str]:
-    """Tokenise text with NLTK, lowercase, remove stopwords & non-alpha."""
-    tokens = word_tokenize(text.lower())
-    return [
-        t for t in tokens
-        if t.isalpha() and t not in _NLTK_STOPWORDS and len(t) > 1
-    ]
-
-
-def _error_result(
-    algo: str,
-    resume_skills: list[str],
-    jd_text: str,
-    message: str,
-) -> dict[str, Any]:
-    """Build a standardised error result dict with score=0."""
-    print(f"  ✗ Error ({algo}): {message}")
-
-    # Still attempt skill matching so the caller gets partial info
-    try:
-        jd_keywords = extract_jd_keywords(jd_text)
-        matched, missing = compute_skill_match(resume_skills, jd_keywords)
-    except Exception:
-        matched, missing = [], []
+    if domain_score == 0:
+        gen = ["api", "test", "debug", "deploy", "review", "database", "server",
+               "code review", "performance", "optimize", "architecture"]
+        domain_score = min(75.0, sum(7 for g in gen if g in text_l))
 
     return {
-        "score": 0.0,
-        "algo_used": algo,
-        "matched_skills": matched,
-        "missing_skills": missing,
-        "explanation": f"Error: {message}",
+        "score":        round(seniority_score * 0.40 + domain_score * 0.60, 1),
+        "level":        jd_level,
+        "domain_score": round(domain_score, 1),
     }
 
 
-def _is_ollama_running(host: str) -> bool:
-    """Helper to check if Ollama server is reachable."""
-    try:
-        with httpx.Client(timeout=1.0) as client:
-            resp = client.get(host)
-            return resp.status_code == 200
-    except Exception:
-        return False
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 5 — Keyword Coverage (8%)
+# ═══════════════════════════════════════════════════════════════
+
+def _c5_keyword_coverage(raw_text: str, jd_kw: dict) -> dict:
+    """BM25-inspired term coverage. Score: 0–100."""
+    text_l  = raw_text.lower()
+    all_kws = jd_kw.get("all", [])[:50]
+    if not all_kws:
+        return {"score": 50.0, "hits": 0, "total": 0, "coverage": 0.0}
+
+    hits     = [k for k in all_kws if k in text_l]
+    coverage = len(hits) / len(all_kws)
+
+    # Non-linear mapping (sqrt amplifies low-coverage)
+    score = min(100.0, (coverage ** 0.55) * 100.0)
+    return {
+        "score":    round(score, 1),
+        "hits":     len(hits),
+        "total":    len(all_kws),
+        "coverage": round(coverage, 3),
+    }
 
 
-def _get_ollama_model(ollama_host: str, preferred_model: str) -> str:
-    """Fetch installed models from local Ollama and pick the best match."""
-    try:
-        url = f"{ollama_host}/api/tags"
-        with httpx.Client(timeout=2.0) as client:
-            resp = client.get(url)
-            if resp.status_code == 200:
-                models = [m.get("name") for m in resp.json().get("models", [])]
-                # If preferred model matches exactly
-                if preferred_model in models:
-                    return preferred_model
-                
-                # Check priority list
-                priority_list = ["lfm2.5-thinking", "qwen3.5:2b", "minicpm-v4.6:1b"]
-                for p in priority_list:
-                    p_lower = p.lower()
-                    p_base = p_lower.split(":")[0]
-                    for m in models:
-                        m_lower = m.lower()
-                        # Match exactly, by substring, or by base prefix (e.g. qwen, minicpm, lfm)
-                        if p_lower == m_lower or p_lower in m_lower or p_base in m_lower:
-                            return m
-                
-                # If preferred model base matches
-                pref_base = preferred_model.split(":")[0]
-                for m in models:
-                    if pref_base in m or m.startswith(pref_base):
-                        return m
-                
-                if models:
-                    return models[0]
-    except Exception:
-        pass
-    return preferred_model
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 6 — Resume Quality (5%)
+# ═══════════════════════════════════════════════════════════════
 
+def _c6_resume_quality(
+    raw_text: str,
+    skills: list,
+    projects: list,
+    email: str = "",
+    phone: str = "",
+    github_url: str = "",
+) -> dict:
+    """Score: 0–100. Completeness, format, ATS compliance."""
+    score = 0
+    text_l = raw_text.lower()
 
-def _query_llm(prompt: str, system_instruction: str = "") -> str:
-    """Send a prompt to local Ollama, Gemini, or OpenAI API via HTTP."""
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    
-    use_ollama = os.getenv("USE_OLLAMA", "false").lower() == "true"
-    ollama_model = os.getenv("OLLAMA_MODEL", "lfm2.5-thinking")
-    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    # Contact info (20 pts)
+    score += 8  if email                               else 0
+    score += 6  if phone                               else 0
+    score += 6  if (github_url or "github" in text_l)  else 0
 
-    # Auto-detect if Ollama is running and no cloud API keys are set
-    if not use_ollama and not gemini_key and not openai_key:
-        if _is_ollama_running(ollama_host):
-            use_ollama = True
+    # Sections present (35 pts — 7 pts each)
+    for pat in [r"\beducat", r"\b(?:experience|work history)\b", r"\b(?:skills?|technologies)\b",
+                r"\bprojects?\b", r"\b(?:achievements?|awards?|publications?)\b"]:
+        if re.search(pat, text_l):
+            score += 7
 
-    # 1. Local Ollama Route
-    if use_ollama:
-        model_name = _get_ollama_model(ollama_host, ollama_model)
-        print(f"  → [Local LLM] Querying model '{model_name}' via Ollama...")
-        
-        url = f"{ollama_host}/api/chat"
-        headers = {"Content-Type": "application/json"}
-        
-        messages = []
-        if system_instruction:
-            messages.append({"role": "system", "content": system_instruction})
-        messages.append({"role": "user", "content": prompt})
-        
-        data = {
-            "model": model_name,
-            "messages": messages,
-            "stream": False,
-            "options": {
-                "temperature": 0.2
-            }
-        }
-        
-        try:
-            # First-time local LLM load and execution on laptops might take time, set to 300s
-            with httpx.Client(timeout=300.0) as client:
-                resp = client.post(url, headers=headers, json=data)
-            if resp.status_code != 200:
-                raise RuntimeError(f"Ollama returned status code {resp.status_code}: {resp.text}")
-            
-            resp_json = resp.json()
-            content = resp_json.get("message", {}).get("content", "")
-            return content.strip()
-        except Exception as e:
-            # Fall back to cloud APIs if keys are available
-            if gemini_key or openai_key:
-                print(f"  → [Local LLM WARNING] Ollama call failed: {e}. Falling back to Cloud API.")
-                use_ollama = False
-            else:
-                raise RuntimeError(f"Failed to query local Ollama model: {e}") from e
+    # Content quality (45 pts)
+    n_skills = len(skills)
+    score += (12 if n_skills >= 15 else 8 if n_skills >= 8 else 4 if n_skills >= 3 else 0)
 
-    # 2. Gemini API Route
-    if not use_ollama and gemini_key:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-        headers = {"Content-Type": "application/json"}
-        
-        combined_prompt = prompt
-        if system_instruction:
-            combined_prompt = f"{system_instruction}\n\nUser Request:\n{prompt}"
-            
-        data = {
-            "contents": [{
-                "parts": [{"text": combined_prompt}]
-            }]
-        }
-        
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(url, headers=headers, json=data)
-            if resp.status_code != 200:
-                raise RuntimeError(f"Gemini API returned status code {resp.status_code}: {resp.text}")
-            
-            resp_json = resp.json()
-            candidates = resp_json.get("candidates", [])
-            if candidates:
-                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                return text.strip()
-            raise RuntimeError(f"Gemini API returned no candidates: {resp.text}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to query Gemini API: {e}") from e
-
-    # 3. OpenAI API Route
-    elif not use_ollama and openai_key:
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {openai_key}",
-            "Content-Type": "application/json",
-        }
-        messages = []
-        if system_instruction:
-            messages.append({"role": "system", "content": system_instruction})
-        messages.append({"role": "user", "content": prompt})
-        
-        data = {
-            "model": "gpt-4o-mini",
-            "messages": messages,
-            "temperature": 0.2,
-        }
-        
-        try:
-            with httpx.Client(timeout=30.0) as client:
-                resp = client.post(url, headers=headers, json=data)
-            if resp.status_code != 200:
-                raise RuntimeError(f"OpenAI API returned status code {resp.status_code}: {resp.text}")
-            
-            resp_json = resp.json()
-            choices = resp_json.get("choices", [])
-            if choices:
-                text = choices[0].get("message", {}).get("content", "")
-                return text.strip()
-            raise RuntimeError(f"OpenAI API returned no choices: {resp.text}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to query OpenAI API: {e}") from e
-            
-    return ""
-
-
-def generate_hypothetical_resume(jd_text: str) -> str:
-    """Generate a hypothetical resume from a job description (HYRE)."""
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    use_ollama = os.getenv("USE_OLLAMA", "false").lower() == "true"
-    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-
-    # Auto-detect if Ollama is running and no cloud API keys are set
-    if not use_ollama and not gemini_key and not openai_key:
-        if _is_ollama_running(ollama_host):
-            use_ollama = True
-
-    if not gemini_key and not openai_key and not use_ollama:
-        return ""
-        
-    system_instruction = (
-        "You are an expert technical recruiter. Your task is to generate a brief, "
-        "hypothetical ideal resume candidate description matching the given job description. "
-        "Include candidate summary, key skills, and brief past experience outlines. "
-        "Output ONLY the text of the hypothetical resume."
+    metrics = re.findall(
+        r"\b\d+%|\b\d+x\b|\b\d+ms\b|\b\d+k\b|\$\d+|\b\d+\s*(?:users|requests|seconds|customers)\b",
+        raw_text,
     )
-    
-    prompt = f"Job Description:\n{jd_text}\n\nGenerate the hypothetical ideal resume:"
-    
-    try:
-        print("  → [HYRE] Querying LLM to generate hypothetical resume...")
-        hypothetical = _query_llm(prompt, system_instruction)
-        print("  → [HYRE] Hypothetical resume successfully generated.")
-        return hypothetical
-    except Exception as e:
-        print(f"  → [HYRE WARNING] Failed to generate hypothetical resume: {e}. Falling back.")
-        return ""
+    score += min(10, len(metrics) * 2)
+
+    wc = len(raw_text.split())
+    score += (12 if wc >= 500 else 8 if wc >= 350 else 4 if wc >= 200 else 0)
+
+    n_proj = len(projects)
+    score += (11 if n_proj >= 4 else 8 if n_proj >= 2 else 4 if n_proj >= 1 else 0)
+
+    return {"score": min(100, score), "word_count": wc}
 
 
-def re_rank_candidates_llm(candidates_list: list[dict], jd_text: str) -> list[dict]:
-    """Perform Stage 2 listwise re-ranking using an LLM (Ollama, Gemini, or OpenAI)."""
-    if not candidates_list:
-        return []
-        
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    use_ollama = os.getenv("USE_OLLAMA", "false").lower() == "true"
-    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 7 — Education (4%)
+# ═══════════════════════════════════════════════════════════════
 
-    # Auto-detect if Ollama is running and no cloud API keys are set
-    if not use_ollama and not gemini_key and not openai_key:
-        if _is_ollama_running(ollama_host):
-            use_ollama = True
+_CS_FIELDS = [
+    "computer science", "computer engineering", "software engineering",
+    "information technology", "electronics and communication",
+    "electrical engineering", "cs", "cse", "it", "ece", "eee", "btech",
+]
+_STEM_FIELDS = [
+    "mathematics", "physics", "statistics", "data science",
+    "information systems", "bioinformatics", "mechanical",
+]
 
-    if not gemini_key and not openai_key and not use_ollama:
-        print("  → [Re-ranking WARNING] No API keys or local LLM found. Skipping Stage 2 LLM Re-ranking.")
-        # Attach default empty explanations
-        for c in candidates_list:
-            if "llm_explanation" not in c:
-                c["llm_explanation"] = {
-                    "strengths": [],
-                    "gaps": [],
-                    "fit_justification": "Stage 1 scoring retained (LLM re-ranker bypassed)."
-                }
-        return candidates_list
 
-    print(f"  → [Re-ranking] Running Stage 2 LLM listwise re-ranking on {len(candidates_list)} candidates...")
-    
-    # Construct a single compact prompt listing candidates and their profiles
-    candidates_summary = []
-    for idx, c in enumerate(candidates_list):
-        name = c.get("name", f"Candidate_{idx+1}")
-        skills = ", ".join(c.get("matched_skills", []))
-        missing = ", ".join(c.get("missing_skills", []))
-        stage1_score = c.get("score", 0.0)
-        resume_snippet = c.get("resume_text", "")[:1200]
-        
-        candidates_summary.append(
-            f"Candidate ID: {idx+1}\n"
-            f"Name: {name}\n"
-            f"Stage 1 Score: {stage1_score}\n"
-            f"Matched Skills: {skills}\n"
-            f"Missing Skills: {missing}\n"
-            f"Resume Text Snippet: {resume_snippet}\n"
-            f"----------------------------------------"
-        )
-        
-    prompt = (
-        f"Job Description:\n{jd_text}\n\n"
-        f"Candidates to Rank:\n" + "\n".join(candidates_summary) + "\n\n"
-        f"Your task is to evaluate these candidates based on their fit for the role. "
-        f"You must ONLY cite strengths that are explicitly present in the candidate's 'Matched Skills' list. "
-        f"Do NOT infer or hallucinate skills that are not explicitly provided. "
-        f"For each candidate, output:\n"
-        f"1. 2-3 specific strengths (grounded ONLY in their matched skills).\n"
-        f"2. 1-2 gaps or missing qualifications.\n"
-        f"3. A 1-sentence justification of their fit.\n\n"
-        f"Respond ONLY with a valid JSON block of this format:\n"
-        f"{{\n"
-        f"  \"evaluations\": [\n"
-        f"    {{\n"
-        f"      \"candidate_id\": 1,\n"
-        f"      \"strengths\": [\"Python\", \"FastAPI\"],\n"
-        f"      \"gaps\": [\"Missing Kubernetes\"],\n"
-        f"      \"justification\": \"Solid backend developer with required Python/FastAPI experience.\"\n"
-        f"    }}\n"
-        f"  ]\n"
-        f"}}"
+def _c7_education(raw_text: str, education: str = "") -> dict:
+    edu = (education + " " + raw_text).lower()
+    level = 5 if any(d in edu for d in ["phd","ph.d","doctorate"]) else \
+            10 if any(d in edu for d in ["master","m.tech","m.e.","msc","m.s."]) else \
+            5  if any(d in edu for d in ["bachelor","b.tech","b.e.","bsc","b.sc","be "]) else 2
+    field = 65 if any(f in edu for f in _CS_FIELDS) else \
+            45 if any(f in edu for f in _STEM_FIELDS) else 20
+    bonus = 0
+    if re.search(r"\b(?:gpa|cgpa)[\s:]+[89]\.", edu) or re.search(r"\b[89]\.\d+\s*/\s*10\b", edu):
+        bonus += 10
+    if any(t in edu for t in ["distinction","first class","iit","nit","bits","gold medal"]):
+        bonus += 5
+    return {"score": min(100, field + level + bonus)}
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMPONENT 8 — Certifications (3%)
+# ═══════════════════════════════════════════════════════════════
+
+_CERT_CHECKS = [
+    (r"\baws\s+certified|\bawssa\b|\baws\s+saa\b|\bcloud\s+practitioner\b", 25),
+    (r"\bgcp\s+certified|\bgoogle\s+cloud\s+certified", 25),
+    (r"\bazure\s+certified|\baz-\d{3}\b", 25),
+    (r"\bcka\b|\bckad\b|\bkubernetes\s+certified\b", 20),
+    (r"\bopen.source\s+(?:contributor|maintainer)|\bcore\s+maintainer\b", 20),
+    (r"\bhackathon\b.*(?:won|winner|prize|1st|first)|\bwon\b.*hackathon", 15),
+    (r"\bhackathon\b", 8),
+    (r"\bcompetitive\s+programming|\bleetcode\b.*(?:top|rank)|\bcodeforces\b.*rank", 10),
+    (r"\bpublication|\bieee\b|\bacm\b|\bconference\s+paper\b|\bjournal\b", 15),
+    (r"\bcertif", 8),
+    (r"\bcoursera|\budemy|\bedx\b", 5),
+]
+
+
+def _c8_certifications(raw_text: str) -> dict:
+    score = 30.0
+    text_l = raw_text.lower()
+    for pattern, pts in _CERT_CHECKS:
+        if re.search(pattern, text_l, re.IGNORECASE):
+            score += pts
+    return {"score": min(100.0, score)}
+
+
+# ═══════════════════════════════════════════════════════════════
+# PENALTY LAYER (0 to -15)
+# ═══════════════════════════════════════════════════════════════
+
+def _penalty(skill_info: dict, projects: list, raw_text: str) -> float:
+    p = 0.0
+    req_ratio = skill_info.get("req_ratio", 1.0)
+    if req_ratio < 0.20:
+        p -= 15.0
+    elif req_ratio < 0.30:
+        p -= 8.0
+    elif req_ratio < 0.45:
+        p -= 3.0
+
+    if not projects:
+        has_proj = bool(re.search(r"(?i)\bproject\b", raw_text))
+        if not has_proj:
+            p -= 5.0
+
+    if len(raw_text.split()) < 180:
+        p -= 5.0
+
+    words = re.findall(r"\b[a-z]{4,}\b", raw_text.lower())
+    freq  = Counter(words)
+    stuffed = [w for w, c in freq.most_common(30) if c > 10 and w not in _STOP]
+    if len(stuffed) > 4:
+        p -= 5.0
+
+    return max(-15.0, p)
+
+
+# ═══════════════════════════════════════════════════════════════
+# STRENGTHS & WEAKNESSES (for Hiring Confidence display)
+# ═══════════════════════════════════════════════════════════════
+
+def _compute_strengths(
+    matched_skills: list[str],
+    evidence_weights: dict,
+    proj_texts: list[str],
+    top_n: int = 8,
+) -> list[dict]:
+    """
+    Compute star rating for matched skills.
+    Stars = min(5, base_1 + floor(proj_count * 0.8))
+    Skills backed by multiple projects get 4-5 stars.
+    """
+    strengths = []
+    for skill in matched_skills:
+        proj_count = sum(1 for pt in proj_texts if _skill_present(skill, pt, set()))
+        # Stars: 1 base + 1 per project (capped at 5)
+        stars = min(5, 1 + proj_count)
+        # Boost for high evidence weight
+        ev = evidence_weights.get(skill, 1.0)
+        if ev >= 2.0:
+            stars = min(5, stars + 1)
+        strengths.append({"skill": skill, "stars": stars, "projects": proj_count})
+
+    return sorted(strengths, key=lambda x: x["stars"], reverse=True)[:top_n]
+
+
+# ═══════════════════════════════════════════════════════════════
+# WEIGHTS & LABELS
+# ═══════════════════════════════════════════════════════════════
+
+WEIGHTS = {
+    "required_skill_match": 0.35,
+    "project_evidence":     0.25,
+    "semantic_match":       0.10,
+    "experience_relevance": 0.10,
+    "keyword_coverage":     0.08,
+    "resume_quality":       0.05,
+    "education":            0.04,
+    "certifications":       0.03,
+}
+
+COMPONENT_LABELS = {
+    "required_skill_match": "Required Skill Match",
+    "project_evidence":     "Project Evidence",
+    "semantic_match":       "Semantic Alignment",
+    "experience_relevance": "Experience Relevance",
+    "keyword_coverage":     "Keyword Coverage",
+    "resume_quality":       "Resume Quality",
+    "education":            "Education",
+    "certifications":       "Certifications",
+}
+
+
+# ═══════════════════════════════════════════════════════════════
+# MAIN SCORING FUNCTION
+# ═══════════════════════════════════════════════════════════════
+
+def score_candidate(
+    raw_text:   str,
+    skills:     list[str],
+    projects:   list,
+    education:  str = "",
+    email:      str = "",
+    phone:      str = "",
+    github_url: str = "",
+    jd_text:    str = "",
+    model       = None,
+    device:     str = "cpu",
+) -> dict:
+    """
+    Evidence-aggregation ATS score for one candidate.
+
+    Returns a comprehensive dict with final_score, all 8 component scores,
+    confidence tier, strengths with star ratings, and weaknesses.
+    """
+    if not jd_text.strip():
+        return {"final_score": 0.0, "error": "Empty job description"}
+
+    m = model or _get_model()
+    jd_kw = extract_jd_keywords(jd_text)
+
+    # ── Encode resume + JD ───────────────────────────────────────────────────
+    embs = _encode([raw_text, jd_text], m)
+    resume_emb, jd_emb = embs[0], embs[1]
+    raw_cosine = float(np.dot(resume_emb, jd_emb))
+
+    # ── All 8 components ─────────────────────────────────────────────────────
+    c1 = _c1_required_skills(skills, raw_text, projects, jd_kw)
+    c2 = _c2_project_evidence(projects, raw_text, jd_kw, jd_emb, m)
+    c3 = _sigmoid_calibrate(raw_cosine)
+    c4 = _c4_experience(raw_text, jd_text, projects)
+    c5 = _c5_keyword_coverage(raw_text, jd_kw)
+    c6 = _c6_resume_quality(raw_text, skills, projects, email, phone, github_url)
+    c7 = _c7_education(raw_text, education)
+    c8 = _c8_certifications(raw_text)
+    pen = _penalty(c1, projects, raw_text)
+
+    raw_scores = {
+        "required_skill_match": c1["score"],
+        "project_evidence":     c2["score"],
+        "semantic_match":       c3,
+        "experience_relevance": c4["score"],
+        "keyword_coverage":     c5["score"],
+        "resume_quality":       c6["score"],
+        "education":            c7["score"],
+        "certifications":       c8["score"],
+    }
+
+    weighted_sum = sum(raw_scores[k] * w for k, w in WEIGHTS.items())
+    final = round(max(0.0, min(100.0, weighted_sum + pen)), 1)
+
+    # ── Confidence tier ───────────────────────────────────────────────────────
+    tier_info = get_tier(final)
+
+    # ── Strengths / weaknesses ────────────────────────────────────────────────
+    proj_texts_lower = [pt.lower() for pt in _build_project_texts(projects, raw_text)]
+    strengths  = _compute_strengths(
+        c1["matched"], c1["evidence_weights"], proj_texts_lower
     )
-    
-    system_instruction = (
-        "You are an expert recruitment system. Output ONLY a clean, valid JSON object matching "
-        "the requested schema. Do not output any markdown wrapper or surrounding text. "
-        "Never hallucinate skills not present in the candidate's profile."
+    weaknesses = c1["missing"]
+
+    # ── Explanation ───────────────────────────────────────────────────────────
+    matched = c1["matched"]
+    missing = c1["missing"]
+    explanation = (
+        f"{tier_info['label']} ({final}/100) — {tier_info['recommendation']}. "
+        f"Skill match: {c1['matched_count']}/{c1['total_required']} required "
+        f"({'evidence-boosted' if any(v>1 for v in c1['evidence_weights'].values()) else 'listed only'}). "
+        f"Semantic: {c3}/100 (cosine: {raw_cosine:.3f}). "
+        f"Projects with strong evidence: {c2.get('strong_count', 0)}. "
+        + (f"Missing: {', '.join(missing[:5])}. " if missing else "No critical gaps. ")
+        + (f"Penalty: {pen:.0f}." if pen < 0 else "")
     )
-    
-    try:
-        response_text = _query_llm(prompt, system_instruction)
-        
-        # Strip markdown syntax if returned
-        json_clean = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", response_text.strip())
-        
-        ranking_data = json.loads(json_clean)
-        evaluations = ranking_data.get("evaluations", [])
-        
-        # Build lookup map
-        rank_map = {int(r["candidate_id"]): r for r in evaluations if "candidate_id" in r}
-        
-        updated_candidates = []
-        for idx, c in enumerate(candidates_list):
-            cand_id = idx + 1
-            if cand_id in rank_map:
-                r_info = rank_map[cand_id]
-                c["llm_explanation"] = {
-                    "strengths": r_info.get("strengths", []),
-                    "gaps": r_info.get("gaps", []),
-                    "fit_justification": r_info.get("justification", "No justification provided.")
-                }
-            else:
-                c["llm_explanation"] = {
-                    "strengths": c.get("matched_skills", [])[:3],
-                    "gaps": c.get("missing_skills", [])[:2],
-                    "fit_justification": "Retained Stage 1 scoring due to parser fallback."
-                }
-            updated_candidates.append(c)
-            
-        # Re-sort by score descending
-        updated_candidates.sort(key=lambda x: x["score"], reverse=True)
-        print("  → [Re-ranking] Successfully re-ranked candidates and attached explanations.")
-        return updated_candidates
-        
-    except Exception as e:
-        print(f"  → [Re-ranking WARNING] LLM Re-ranking failed: {e}. Returning Stage 1 results.")
-        # Attach default explanation block to avoid crashing UI
-        for c in candidates_list:
-            if "llm_explanation" not in c:
-                c["llm_explanation"] = {
-                    "strengths": [],
-                    "gaps": [],
-                    "fit_justification": "Stage 1 scoring retained (LLM re-ranker bypassed)."
-                }
-        return candidates_list
-        print("  → [Re-ranking] Successfully re-ranked candidates and attached explanations.")
-        return updated_candidates
-        
-    except Exception as e:
-        print(f"  → [Re-ranking WARNING] LLM Re-ranking failed: {e}. Returning Stage 1 results.")
-        # Attach default explanation block to avoid crashing UI
-        for c in candidates_list:
-            if "llm_explanation" not in c:
-                c["llm_explanation"] = {
-                    "strengths": [],
-                    "gaps": [],
-                    "fit_justification": "Stage 1 scoring retained (LLM re-ranker bypassed)."
-                }
-        return candidates_list
+
+    # ── Component breakdown for UI ────────────────────────────────────────────
+    components = {
+        k: {
+            "label":        COMPONENT_LABELS[k],
+            "score":        round(raw_scores[k], 1),
+            "weight":       round(WEIGHTS[k] * 100, 0),
+            "contribution": round(raw_scores[k] * WEIGHTS[k], 2),
+        }
+        for k in WEIGHTS
+    }
+
+    return {
+        "final_score":      final,
+        "raw_cosine":       round(raw_cosine, 4),
+        "tier":             tier_info["label"],
+        "recommendation":   tier_info["recommendation"],
+        "tier_note":        tier_info["note"],
+        "components":       components,
+        "penalty":          pen,
+        "matched_skills":   matched,
+        "missing_skills":   missing,
+        "strengths":        strengths,
+        "weaknesses":       weaknesses[:8],
+        "jd_required":      jd_kw.get("required", []),
+        "jd_preferred":     jd_kw.get("preferred", []),
+        "explanation":      explanation,
+    }

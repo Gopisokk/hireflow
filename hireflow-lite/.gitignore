@@ -1,1 +1,17 @@
+# Virtual Environments & Caches
+venv/
+venv_314/
+__pycache__/
+*.pyc
+github_cache/
 .ragatouille/
+
+# Uploaded Files & Secret Form Responses
+uploads/
+*.csv
+*.zip
+
+# Local Database & System Logs
+hireflow.db
+.agents/
+scratch/

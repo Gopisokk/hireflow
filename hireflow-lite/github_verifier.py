@@ -83,6 +83,7 @@ query GetProfile($login: String!) {
         forkCount
         createdAt
         updatedAt
+        pushedAt
         primaryLanguage { name }
         languages(first: 8) {
           edges { size node { name } }
@@ -144,6 +145,45 @@ def _write_cache(username: str, user_data: dict) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 # API Fetching
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+# ── Rate Limit & Security Tracking ───────────────────────────────────────────
+_RATE_LIMIT_STATS = {
+    "queries_made": 0,
+    "total_cost": 0,
+    "last_remaining": None,
+    "last_reset": None,
+}
+
+
+def mask_github_token(token: str) -> str:
+    """Mask a GitHub PAT for safe logging / display (e.g. ghp_1234...abcd)."""
+    if not token:
+        return ""
+    if len(token) <= 8:
+        return "********"
+    return f"{token[:4]}...{token[-4:]}"
+
+
+def get_rate_limit_stats() -> dict:
+    """Return session-level API budget usage statistics."""
+    return dict(_RATE_LIMIT_STATS)
+
+
+def _track_rate_limit(data: dict) -> None:
+    """Extract and track rateLimit info from GraphQL response."""
+    rl = data.get("data", {}).get("rateLimit") or data.get("rateLimit")
+    if isinstance(rl, dict):
+        cost = rl.get("cost", 1)
+        remaining = rl.get("remaining")
+        reset_at = rl.get("resetAt")
+
+        _RATE_LIMIT_STATS["queries_made"] += 1
+        _RATE_LIMIT_STATS["total_cost"] += cost
+        if remaining is not None:
+            _RATE_LIMIT_STATS["last_remaining"] = remaining
+        if reset_at:
+            _RATE_LIMIT_STATS["last_reset"] = reset_at
 
 
 def fetch_github_profile(username: str, token: str) -> dict:
@@ -210,6 +250,8 @@ def fetch_github_profile(username: str, token: str) -> dict:
         msgs = "; ".join(e.get("message", "") for e in data["errors"])
         raise RuntimeError(f"GitHub GraphQL errors: {msgs}")
 
+    _track_rate_limit(data)
+
     user = data.get("data", {}).get("user")
     if user is None:
         raise RuntimeError(
@@ -218,6 +260,286 @@ def fetch_github_profile(username: str, token: str) -> dict:
 
     _write_cache(username, user)
     return user
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Per-Repo Commit Activity
+# ──────────────────────────────────────────────────────────────────────────────
+
+_REPO_ACTIVITY_QUERY = """
+query GetRepoActivity($owner: String!, $name: String!) {
+  rateLimit { cost remaining resetAt }
+  repository(owner: $owner, name: $name) {
+    isFork
+    parent { nameWithOwner url }
+    pushedAt
+    createdAt
+    defaultBranchRef {
+      target {
+        ... on Commit {
+          history(first: 100) {
+            totalCount
+            nodes {
+              committedDate
+              author {
+                name
+                email
+                user { login }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def fetch_repo_commit_activity(
+    owner: str, repo_name: str, token: str
+) -> dict:
+    """Fetch detailed commit activity for a single repository.
+
+    Returns a dict with:
+        - is_fork (bool)
+        - forked_from (str | None): 'owner/repo' if forked
+        - pushed_at (str | None): ISO datetime of last push
+        - created_at (str | None): ISO datetime of repo creation
+        - total_commits (int): total commits on default branch
+        - active_days (int): unique calendar days with commits
+        - commit_dates (list[str]): list of YYYY-MM-DD date strings
+        - author_logins (set[str]): set of commit author GitHub logins
+        - commits_by_author (dict[str, int]): login -> commit count
+    """
+    import time as _time
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "query": _REPO_ACTIVITY_QUERY,
+        "variables": {"owner": owner, "name": repo_name},
+    }
+
+    result = {
+        "is_fork": False,
+        "forked_from": None,
+        "pushed_at": None,
+        "created_at": None,
+        "last_pushed": None,
+        "total_commits": 0,
+        "active_days": 0,
+        "commit_dates": [],
+        "first_commit_date": None,
+        "last_commit_date": None,
+        "author_logins": [],
+        "commits_by_author": {},
+        "author_commit_counts": {},
+        "commit_nodes": [],
+    }
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(GITHUB_GRAPHQL_ENDPOINT, headers=headers, json=body)
+
+        if resp.status_code == 403:
+            remaining = resp.headers.get("X-RateLimit-Remaining")
+            if remaining == "0" or "rate limit" in resp.text.lower():
+                reset = resp.headers.get("X-RateLimit-Reset")
+                try:
+                    reset_time = int(reset) if reset else int(_time.time()) + 60
+                except ValueError:
+                    reset_time = int(_time.time()) + 60
+                wait_seconds = max(reset_time - int(_time.time()) + 5, 10)
+                print(f"  → [GitHub API] Rate limit hit. Sleeping {wait_seconds}s...")
+                _time.sleep(wait_seconds)
+                # Retry once
+                resp = client.post(GITHUB_GRAPHQL_ENDPOINT, headers=headers, json=body)
+
+        if resp.status_code != 200:
+            print(f"  → [GitHub API] HTTP {resp.status_code} for {owner}/{repo_name}")
+            return result
+
+        data = resp.json()
+        if "errors" in data:
+            print(f"  → [GitHub API] GraphQL error for {owner}/{repo_name}")
+            return result
+
+        _track_rate_limit(data)
+
+        repo = data.get("data", {}).get("repository")
+        if not repo:
+            return result
+
+        result["is_fork"] = repo.get("isFork", False)
+        parent = repo.get("parent")
+        if parent:
+            result["forked_from"] = parent.get("nameWithOwner")
+        result["pushed_at"] = repo.get("pushedAt")
+        result["last_pushed"] = repo.get("pushedAt")
+        result["created_at"] = repo.get("createdAt")
+
+        branch_ref = repo.get("defaultBranchRef")
+        if branch_ref:
+            target = branch_ref.get("target", {})
+            history = target.get("history", {})
+            result["total_commits"] = history.get("totalCount", 0)
+
+            nodes = history.get("nodes", [])
+            result["commit_nodes"] = nodes
+            dates = set()
+            commits_by_author = {}
+            author_logins = set()
+
+            for commit in nodes:
+                # Extract date
+                committed_date = commit.get("committedDate", "")
+                if committed_date:
+                    day = committed_date[:10]  # YYYY-MM-DD
+                    dates.add(day)
+
+                # Extract author
+                author = commit.get("author", {})
+                user = author.get("user", {})
+                login = user.get("login", "") if user else ""
+                if login:
+                    author_logins.add(login)
+                    commits_by_author[login] = commits_by_author.get(login, 0) + 1
+
+            sorted_dates = sorted(dates)
+            result["active_days"] = len(sorted_dates)
+            result["commit_dates"] = sorted_dates
+            if sorted_dates:
+                result["first_commit_date"] = sorted_dates[0]
+                result["last_commit_date"] = sorted_dates[-1]
+            result["author_logins"] = list(author_logins)  # JSON-serializable list!
+            result["commits_by_author"] = commits_by_author
+            result["author_commit_counts"] = commits_by_author
+
+    except Exception as exc:
+        print(f"  → [GitHub API] Error fetching activity for {owner}/{repo_name}: {exc}")
+
+    return result
+
+
+def verify_project_exists(
+    project_name: str,
+    github_username: str,
+    github_repos: list[dict],
+    token: str,
+    similarity_threshold: float = 0.5,
+) -> dict:
+    """Check if a claimed resume project exists on the candidate's GitHub.
+
+    Uses a 3-tier matching strategy:
+    1. Exact name match (case-insensitive)
+    2. Fuzzy name match (SequenceMatcher ratio >= 0.6)
+    3. Falls back to the best fuzzy match if above threshold
+
+    If a match is found, fetches detailed commit activity.
+
+    Returns
+    -------
+    dict
+        {
+            "claimed_project": str,
+            "status": "verified" | "uncertain" | "unverified",
+            "matched_repo": str | None,
+            "match_method": "exact" | "fuzzy" | None,
+            "match_score": float,
+            "is_fork": bool,
+            "forked_from": str | None,
+            "total_commits": int,
+            "active_days": int,
+            "last_pushed": str | None,
+            "candidate_is_author": bool,
+            "commit_frequency": float,
+        }
+    """
+    result = {
+        "claimed_project": project_name,
+        "status": "unverified",
+        "matched_repo": None,
+        "match_method": None,
+        "match_score": 0.0,
+        "is_fork": False,
+        "forked_from": None,
+        "total_commits": 0,
+        "active_days": 0,
+        "last_pushed": None,
+        "candidate_is_author": False,
+        "commit_frequency": 0.0,
+    }
+
+    if not github_repos or not project_name:
+        return result
+
+    project_lower = project_name.lower().strip()
+    best_match = None
+    best_score = 0.0
+    best_method = None
+
+    for repo in github_repos:
+        repo_name = (repo.get("name") or "").lower().strip()
+        if not repo_name:
+            continue
+
+        # Tier 1: Exact match
+        if repo_name == project_lower:
+            best_match = repo
+            best_score = 1.0
+            best_method = "exact"
+            break
+
+        # Tier 2: Fuzzy match
+        ratio = SequenceMatcher(None, project_lower, repo_name).ratio()
+        if ratio > best_score:
+            best_score = ratio
+            best_match = repo
+            best_method = "fuzzy"
+
+    if best_match is None:
+        return result
+
+    matched_repo_name = best_match.get("name", "")
+
+    if best_score >= 0.8:
+        result["status"] = "verified"
+    elif best_score >= similarity_threshold:
+        result["status"] = "uncertain"
+    else:
+        return result  # Below threshold, don't even bother fetching activity
+
+    result["matched_repo"] = matched_repo_name
+    result["match_method"] = best_method
+    result["match_score"] = round(best_score, 4)
+    result["is_fork"] = best_match.get("isFork", False)
+
+    # Fetch detailed commit activity for the matched repo
+    if token and github_username:
+        print(f"    → Fetching commit activity for {github_username}/{matched_repo_name}...")
+        activity = fetch_repo_commit_activity(github_username, matched_repo_name, token)
+
+        result["is_fork"] = activity.get("is_fork", False)
+        result["forked_from"] = activity.get("forked_from")
+        result["total_commits"] = activity.get("total_commits", 0)
+        result["active_days"] = activity.get("active_days", 0)
+        result["last_pushed"] = (activity.get("pushed_at") or "")[:10] or None
+
+        # Check if the candidate is actually an author
+        author_logins = activity.get("author_logins", set())
+        if github_username.lower() in {a.lower() for a in author_logins}:
+            result["candidate_is_author"] = True
+
+        # Commit frequency = commits / active days
+        if result["active_days"] > 0:
+            result["commit_frequency"] = round(
+                result["total_commits"] / result["active_days"], 2
+            )
+
+    return result
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -487,10 +809,38 @@ def score_fork_detection(data: dict, resume_projects: list[str] | None = None) -
 
 
 def score_commit_authorship(data: dict) -> float:
-    """Simplified: 7 if user email is set, 3 otherwise."""
+    """
+    Real authorship signal: checks whether the candidate's GitHub login
+    appears as a commit author in their repositories.
+
+    Uses contributorsCollection data from the GraphQL profile query.
+    Falls back to checking email field as a very weak proxy if no
+    contributor data is available.
+
+    Score:
+      10.0 — username confirmed in commit author data
+       5.0 — email set but no commit author data to verify
+       2.0 — no email and no commit author data
+    """
+    login = (data.get("login") or "").lower()
+    # GitHub contributor data is in repos' defaultBranchRef commit history nodes
+    # Check if the candidate's login appears in any repo commit authors
+    if login:
+        for repo in _repos(data):
+            history = (repo.get("defaultBranchRef") or {}).get("target", {}).get("history", {})
+            nodes = history.get("nodes") or []
+            for commit in nodes:
+                author = commit.get("author") or {}
+                user   = author.get("user") or {}
+                if (user.get("login") or "").lower() == login:
+                    return 10.0
+                # also check name/email match
+                if login in (author.get("email") or "").lower():
+                    return 8.0
+    # Fallback: at least email field is set (profile completeness signal)
     if data.get("email"):
-        return 7.0
-    return 3.0
+        return 5.0
+    return 2.0
 
 
 def score_first_commit_date(data: dict) -> float:
@@ -754,20 +1104,63 @@ def score_readme_resume_alignment(data: dict, resume_projects: list[str] | None 
 
 
 def score_project_age_vs_experience(data: dict) -> float:
-    """min(oldest_repo_age_months / 24, 1) * 10."""
-    repos = _repos(data)
+    """
+    Evidence-based development timeline score.
+
+    Duration ALONE is a weak and misleading signal:
+      - A 24-month empty repo scores high under age-only logic
+      - A 2-day hackathon with 20 meaningful commits scores near 0
+
+    Correct approach: measure commit density (commits per active day)
+    combined with development span as a secondary supporting signal.
+
+    Formula:
+      commit_density_signal = min(avg_commits_per_active_day / 3.0, 1.0)
+      span_signal           = min(span_days / 90.0, 1.0)  # 3 months = full
+      score = (commit_density_signal * 0.65 + span_signal * 0.35) * 10
+
+    A hackathon (2 days, 20 commits): density=10, span=0.022
+      -> (1.0 * 0.65 + 0.022 * 0.35) * 10 = 6.58  (decent signal)
+    An empty 24-month repo: density=0, span=1.0
+      -> (0 * 0.65 + 1.0 * 0.35) * 10 = 3.5  (weak signal, not inflated)
+    """
+    repos = _non_fork_repos(data)
+    if not repos:
+        repos = _repos(data)
     if not repos:
         return 0.0
+
     now = datetime.now(timezone.utc)
-    oldest_months = 0.0
+    total_commits = 0
+    total_active_days = 0
+    max_span_days = 0.0
+
     for r in repos:
+        commit_count = _repo_commit_count(r)
+        total_commits += commit_count
+
         try:
             created = datetime.fromisoformat(r["createdAt"].replace("Z", "+00:00"))
-            months = (now - created).days / 30.0
-            oldest_months = max(oldest_months, months)
+            pushed_at = r.get("pushedAt") or r.get("updatedAt")
+            if pushed_at:
+                last_push = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
+            else:
+                last_push = now
+            span_days = (last_push - created).days
+            max_span_days = max(max_span_days, span_days)
+            # Approximate active days: number of unique calendar weeks with commits
+            # Use commit count as proxy (1 commit ~= 1 active day, capped at span)
+            active_days = min(commit_count, max(1, span_days))
+            total_active_days += active_days
         except (KeyError, ValueError):
             pass
-    return _clamp(min(oldest_months / 24.0, 1.0) * 10.0)
+
+    avg_commit_density = total_commits / max(1, total_active_days)
+    density_signal = min(1.0, avg_commit_density / 3.0)   # 3 commits/day = full signal
+    span_signal    = min(1.0, max_span_days / 90.0)        # 3-month span = full signal
+
+    score = (density_signal * 0.65 + span_signal * 0.35) * 10.0
+    return _clamp(score)
 
 
 def score_tech_in_repo_matches_resume(data: dict, resume_skills: list[str] | None = None) -> float:
@@ -826,60 +1219,164 @@ def score_pinned_repo_quality(data: dict) -> float:
     return _clamp(sum(scores) / len(scores) * 10.0)
 
 
+def score_collaboration_profile(data: dict) -> float:
+    """
+    Balanced collaboration signal. Replaces the redundant sole_contributor
+    and multi_contributor factors which measured opposite sides of the same
+    signal (forkCount == 0 vs forkCount > 0) without combining them.
+
+    A developer with BOTH solo original projects (forkCount == 0) AND
+    projects others have forked (forkCount > 0) demonstrates the most
+    complete and credible development profile.
+
+    Scoring:
+      10.0 — has both types (solo + forked-by-others)
+       7.0 — only solo projects (normal for student developers)
+       5.0 — only projects that others have forked (rare, may indicate farm)
+       0.0 — no repositories
+    """
+    repos = _repos(data)
+    if not repos:
+        return 0.0
+    has_solo  = any(r.get("forkCount", 0) == 0 for r in repos)
+    has_multi = any(r.get("forkCount", 0) >  0 for r in repos)
+    if has_solo and has_multi:
+        return 10.0
+    if has_solo:
+        return 7.0
+    if has_multi:
+        return 5.0
+    return 0.0
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Factor Registry & Category Map
 # ──────────────────────────────────────────────────────────────────────────────
 
 FACTOR_REGISTRY: dict[str, callable] = {
     # Profile Credibility
-    "account_age": score_account_age,
-    "profile_completeness": score_profile_completeness,
-    "hireable_flag": score_hireable_flag,
+    "account_age":              score_account_age,
+    "profile_completeness":     score_profile_completeness,
+    "hireable_flag":            score_hireable_flag,
     "organization_memberships": score_organization_memberships,
-    "email_verified": score_email_verified,
+    "email_verified":           score_email_verified,
     # Contribution Activity
-    "active_days": score_active_days,
-    "total_commits": score_total_commits,
-    "longest_streak": score_longest_streak,
-    "current_streak": score_current_streak,
+    "active_days":              score_active_days,
+    "total_commits":            score_total_commits,
+    "longest_streak":           score_longest_streak,
+    "current_streak":           score_current_streak,
     "contribution_consistency": score_contribution_consistency,
-    "weekend_activity": score_weekend_activity,
-    "recent_activity": score_recent_activity,
-    "pr_contributions": score_pr_contributions,
+    "weekend_activity":         score_weekend_activity,
+    "recent_activity":          score_recent_activity,
+    "pr_contributions":         score_pr_contributions,
     # Repository Authenticity
-    "fork_ratio": score_fork_ratio,
-    "original_repos": score_original_repos,
-    "fork_detection": score_fork_detection,
-    "commit_authorship": score_commit_authorship,
-    "first_commit_date": score_first_commit_date,
-    "sole_contributor": score_sole_contributor,
-    "multi_contributor": score_multi_contributor,
+    "fork_ratio":               score_fork_ratio,
+    "original_repos":           score_original_repos,
+    "fork_detection":           score_fork_detection,
+    "commit_authorship":        score_commit_authorship,    # FIXED: real login check
+    "first_commit_date":        score_first_commit_date,
+    "collaboration_profile":    score_collaboration_profile, # MERGED: sole+multi
     # Code Quality Signals
-    "readme_quality": score_readme_quality,
-    "has_tests": score_has_tests,
-    "ci_cd": score_ci_cd,
-    "repo_topics": score_repo_topics,
-    "avg_commits_per_repo": score_avg_commits_per_repo,
-    "issue_pr_activity": score_issue_pr_activity,
+    "readme_quality":           score_readme_quality,
+    "has_tests":                score_has_tests,
+    "ci_cd":                    score_ci_cd,
+    "repo_topics":              score_repo_topics,
+    "avg_commits_per_repo":     score_avg_commits_per_repo,
+    "issue_pr_activity":        score_issue_pr_activity,
     # Skill Verification
-    "language_match": score_language_match,
-    "language_depth": score_language_depth,
-    "language_diversity": score_language_diversity,
-    "primary_language_match": score_primary_language_match,
-    "tech_stack_alignment": score_tech_stack_alignment,
+    "language_match":           score_language_match,
+    "language_depth":           score_language_depth,
+    "language_diversity":       score_language_diversity,
+    "primary_language_match":   score_primary_language_match,
+    "tech_stack_alignment":     score_tech_stack_alignment,
     # Resume Cross-Reference
-    "project_exists": score_project_exists,
-    "project_fuzzy_match": score_project_fuzzy_match,
-    "readme_resume_alignment": score_readme_resume_alignment,
-    "project_age_vs_experience": score_project_age_vs_experience,
+    "project_exists":           score_project_exists,
+    "project_fuzzy_match":      score_project_fuzzy_match,
+    "readme_resume_alignment":  score_readme_resume_alignment,
+    "project_age_vs_experience":score_project_age_vs_experience,  # FIXED: commit-density
     "tech_in_repo_matches_resume": score_tech_in_repo_matches_resume,
     # Social Proof
-    "stars_received": score_stars_received,
-    "forks_received": score_forks_received,
-    "open_source_contributions": score_open_source_contributions,
-    "pinned_repo_quality": score_pinned_repo_quality,
+    "stars_received":           score_stars_received,
+    "forks_received":           score_forks_received,
+    "open_source_contributions":score_open_source_contributions,
+    "pinned_repo_quality":      score_pinned_repo_quality,
 }
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Weighted Group Scoring
+# ──────────────────────────────────────────────────────────────────────────────
+# The 5 evidence groups and their weights for the final GitHub score.
+# Rationale:
+#   40% — Project authenticity is the core question: did the candidate
+#          actually build what they claim on their resume?
+#   25% — Development history proves sustained, real work over time.
+#   20% — Technical evidence confirms the claimed tech stack is real.
+#   10% — Repository quality shows engineering discipline.
+#    5% — Social signals (stars, forks, hireable) are weak proxies;
+#          a student with 0 stars and 4 strong original projects is
+#          still excellent, so these should barely affect the score.
+
+GITHUB_GROUP_WEIGHTS: dict[str, float] = {
+    "Project Authenticity":   0.40,
+    "Development History":    0.25,
+    "Technical Evidence":     0.20,
+    "Repository Quality":     0.10,
+    "Social Context":         0.05,
+}
+
+GITHUB_FACTOR_GROUPS: dict[str, list[str]] = {
+    "Project Authenticity": [
+        "project_exists",
+        "project_fuzzy_match",
+        "readme_resume_alignment",
+        "fork_detection",
+        "original_repos",
+        "fork_ratio",
+        "tech_in_repo_matches_resume",
+        "collaboration_profile",
+    ],
+    "Development History": [
+        "commit_authorship",
+        "total_commits",
+        "active_days",
+        "avg_commits_per_repo",
+        "longest_streak",
+        "current_streak",
+        "contribution_consistency",
+        "project_age_vs_experience",
+    ],
+    "Technical Evidence": [
+        "language_match",
+        "language_depth",
+        "language_diversity",
+        "primary_language_match",
+        "tech_stack_alignment",
+    ],
+    "Repository Quality": [
+        "readme_quality",
+        "has_tests",
+        "ci_cd",
+        "repo_topics",
+        "issue_pr_activity",
+        "first_commit_date",
+    ],
+    "Social Context": [
+        "account_age",
+        "profile_completeness",
+        "hireable_flag",
+        "organization_memberships",
+        "email_verified",
+        "stars_received",
+        "forks_received",
+        "open_source_contributions",
+        "pinned_repo_quality",
+        "recent_activity",
+        "weekend_activity",
+        "pr_contributions",
+    ],
+}
+
+# Legacy flat category map (kept for backward-compatible reporting)
 FACTOR_CATEGORIES: dict[str, list[str]] = {
     "Profile Credibility": [
         "account_age",
@@ -904,8 +1401,7 @@ FACTOR_CATEGORIES: dict[str, list[str]] = {
         "fork_detection",
         "commit_authorship",
         "first_commit_date",
-        "sole_contributor",
-        "multi_contributor",
+        "collaboration_profile",
     ],
     "Code Quality Signals": [
         "readme_quality",
@@ -1059,46 +1555,65 @@ def run_github_verification(
         )
         factor_scores[name] = round(score, 2)
 
-    # ── Aggregate ────────────────────────────────────────────────────────────
+    # ── Weighted Group Aggregation (replaces simple equal-weight average) ────
+    # Each factor score is on a 0-10 scale. Normalize to 0-100 per factor,
+    # average within each group, then weight the groups.
+    group_scores: dict[str, float] = {}
+    for group_name, group_members in GITHUB_FACTOR_GROUPS.items():
+        vals = [factor_scores[m] * 10.0 for m in group_members if m in factor_scores]
+        if vals:
+            group_scores[group_name] = round(sum(vals) / len(vals), 1)
+        else:
+            group_scores[group_name] = 0.0
+
     if factor_scores:
-        overall = sum(factor_scores.values()) / len(factor_scores) * 10.0
+        overall = sum(
+            group_scores.get(g, 0.0) * w
+            for g, w in GITHUB_GROUP_WEIGHTS.items()
+        )
     else:
         overall = 0.0
-    overall = max(0.0, min(100.0, overall))
+    overall = round(max(0.0, min(100.0, overall)), 1)
 
-    # ── Category-level averages ──────────────────────────────────────────────
+    # ── Legacy flat category averages (for backward-compatible reporting) ────
     category_scores: dict[str, float] = {}
     for cat, members in FACTOR_CATEGORIES.items():
-        cat_vals = [factor_scores[m] for m in members if m in factor_scores]
+        cat_vals = [factor_scores[m] * 10.0 for m in members if m in factor_scores]
         if cat_vals:
-            category_scores[cat] = round(sum(cat_vals) / len(cat_vals) * 10.0, 1)
+            category_scores[cat] = round(sum(cat_vals) / len(cat_vals), 1)
 
     # ── Explanation text ─────────────────────────────────────────────────────
-    top_factors = sorted(factor_scores.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_factors    = sorted(factor_scores.items(), key=lambda x: x[1], reverse=True)[:5]
     bottom_factors = sorted(factor_scores.items(), key=lambda x: x[1])[:5]
 
     lines = [
         f"GitHub verification for @{username}: {overall:.1f}/100",
-        f"Checked {len(factor_scores)} factors across {len(category_scores)} categories.",
+        f"Checked {len(factor_scores)} factors across 5 weighted groups.",
         "",
-        "Top strengths:",
+        "Group scores (weighted):",
     ]
-    for name, val in top_factors:
-        lines.append(f"  • {name}: {val}/10")
+    for g, w in GITHUB_GROUP_WEIGHTS.items():
+        gs = group_scores.get(g, 0.0)
+        lines.append(f"  • {g}: {gs:.1f}/100  (weight {int(w*100)}%)")
     lines.append("")
-    lines.append("Areas with lowest scores:")
-    for name, val in bottom_factors:
-        lines.append(f"  • {name}: {val}/10")
+    lines.append("Top factor strengths:")
+    for fname, val in top_factors:
+        lines.append(f"  • {fname}: {val:.1f}/10")
+    lines.append("")
+    lines.append("Factors with lowest scores:")
+    for fname, val in bottom_factors:
+        lines.append(f"  • {fname}: {val:.1f}/10")
 
     explanation = "\n".join(lines)
 
     return {
-        "score": round(overall, 1),
+        "score":           round(overall, 1),
         "factors_checked": list(factor_scores.keys()),
-        "factor_scores": factor_scores,
-        "category_scores": category_scores,
-        "explanation": explanation,
-        "username": username,
+        "factor_scores":   factor_scores,
+        "group_scores":    group_scores,
+        "category_scores": category_scores,     # legacy flat categories
+        "explanation":     explanation,
+        "username":        username,
     }
 
 

@@ -1,16 +1,28 @@
+# HireFlow-Lite v3 — Enterprise ATS
+# Core ML
+torch
+sentence-transformers
+spacy
+
+# Resume Parsing
 PyMuPDF
 python-docx
-rank-bm25
-sentence-transformers
-torch
-httpx
-spacy
-nltk
-python-dotenv
-ragatouille
-numpy
+
+# Database
 sqlite-vec
-gliner
+
+# Web Server
+fastapi
+uvicorn
+python-multipart
+
+# GitHub API
+httpx
+
+# NLP / Utilities
+nltk
+numpy
+python-dotenv
+
+# Optional: LLM query expansion
 openai
-Pillow
-transformers

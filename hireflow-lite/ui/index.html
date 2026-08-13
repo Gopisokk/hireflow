@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HireFlow-Lite — Enterprise ATS</title>
+<meta name="description" content="Enterprise Applicant Tracking System — AI-powered resume screening with vector search, BM25 ranking, and GitHub verification."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+/* ═══════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Pure black & white palette */
+  --black:   #000000;
+  --white:   #ffffff;
+  --gray-50: #fafafa;
+  --gray-100:#f5f5f5;
+  --gray-150:#eeeeee;
+  --gray-200:#e0e0e0;
+  --gray-300:#bdbdbd;
+  --gray-400:#9e9e9e;
+  --gray-500:#757575;
+  --gray-600:#616161;
+  --gray-700:#424242;
+  --gray-800:#212121;
+  --gray-900:#121212;
+
+  /* Status — only slight gray variation, no color */
+  --success-bg:#f0f0f0;
+  --success-txt:#1a1a1a;
+  --warn-bg:#e8e8e8;
+  --warn-txt:#333333;
+  --error-bg:#d8d8d8;
+  --error-txt:#000000;
+
+  /* Typography */
+  --font:'Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+
+  /* Spacing */
+  --r:4px;
+  --r2:2px;
+}
+
+html{scroll-behavior:smooth;font-size:14px}
+body{
+  font-family:var(--font);
+  background:var(--gray-50);
+  color:var(--gray-900);
+  min-height:100vh;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--gray-100)}
+::-webkit-scrollbar-thumb{background:var(--gray-300)}
+::-webkit-scrollbar-thumb:hover{background:var(--gray-400)}
+
+/* ═══════════════════════════════════════════
+   TOPBAR
+═══════════════════════════════════════════ */
+.topbar{
+  position:sticky;top:0;z-index:200;
+  height:52px;
+  background:var(--black);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 32px;
+  border-bottom:1px solid var(--gray-800);
+}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-mark{
+  width:26px;height:26px;
+  background:var(--white);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;
+  color:var(--black);letter-spacing:-.5px;
+}
+.logo-name{
+  font-size:14px;font-weight:700;letter-spacing:-.2px;
+  color:var(--white);
+}
+.logo-ver{
+  font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--gray-400);padding:2px 6px;border:1px solid var(--gray-700);
+}
+
+.nav-links{display:flex;gap:2px}
+.nav-btn{
+  padding:6px 14px;
+  font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;
+  color:var(--gray-400);
+  cursor:pointer;border:none;background:none;
+  transition:color .15s;
+  border-bottom:2px solid transparent;
+}
+.nav-btn:hover{color:var(--white)}
+.nav-btn.active{color:var(--white);border-bottom-color:var(--white)}
+
+.nav-status{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--gray-500)}
+.status-indicator{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 10px;
+  border:1px solid var(--gray-700);
+  font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--gray-400)}
+.status-dot.online{background:var(--white)}
+.gpu-tag{font-size:10px;color:var(--gray-500);font-family:var(--mono);letter-spacing:.3px}
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════ */
+.app{display:grid;grid-template-columns:280px 1fr;min-height:calc(100vh - 52px)}
+
+/* ═══════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════ */
+.sidebar{
+  background:var(--white);
+  border-right:1px solid var(--gray-200);
+  display:flex;flex-direction:column;
+  overflow-y:auto;
+}
+.sidebar-section{
+  padding:20px 20px 0;
+  border-bottom:1px solid var(--gray-150);
+  padding-bottom:20px;
+}
+.sidebar-section:last-child{border-bottom:none}
+
+.section-label{
+  font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  color:var(--gray-400);margin-bottom:12px;
+}
+
+/* Pipeline steps */
+.step-list{display:flex;flex-direction:column;gap:0}
+.step-row{display:flex;align-items:flex-start;gap:12px;padding:10px 0;position:relative}
+.step-row:not(:last-child)::after{
+  content:'';position:absolute;left:13px;top:32px;
+  width:1px;height:calc(100% - 8px);background:var(--gray-200);
+}
+.step-circle{
+  width:26px;height:26px;border-radius:50%;flex-shrink:0;z-index:1;
+  border:1px solid var(--gray-300);background:var(--white);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;color:var(--gray-500);
+  transition:all .2s;
+}
+.step-circle.active{background:var(--black);border-color:var(--black);color:var(--white)}
+.step-circle.done{background:var(--black);border-color:var(--black);color:var(--white)}
+.step-circle.done::after{content:'✓';font-size:10px}
+.step-circle.done span{display:none}
+.step-text{}
+.step-name{font-size:12px;font-weight:600;color:var(--gray-800)}
+.step-desc{font-size:11px;color:var(--gray-400);margin-top:1px}
+
+/* DB stats */
+.db-stat-row{display:flex;justify-content:space-between;align-items:center}
+.db-stat-label{font-size:11px;color:var(--gray-500)}
+.db-stat-val{font-size:20px;font-weight:800;color:var(--black);font-family:var(--mono)}
+.db-stat-sub{font-size:10px;color:var(--gray-400);font-family:var(--mono)}
+
+/* Form controls */
+.form-row{margin-bottom:12px}
+.form-label{
+  display:block;font-size:11px;font-weight:600;letter-spacing:.3px;
+  text-transform:uppercase;color:var(--gray-600);margin-bottom:5px;
+}
+.form-label .req{color:var(--gray-800)}
+.form-label .opt{font-size:9px;font-weight:400;color:var(--gray-400);text-transform:none;letter-spacing:0;margin-left:4px}
+input,textarea,select{
+  width:100%;
+  background:var(--gray-50);
+  border:1px solid var(--gray-200);
+  color:var(--gray-900);
+  font-family:var(--font);font-size:12px;
+  padding:8px 10px;
+  outline:none;
+  border-radius:0;
+  transition:border-color .15s,background .15s;
+  resize:vertical;
+  -webkit-appearance:none;appearance:none;
+}
+input:focus,textarea:focus,select:focus{
+  border-color:var(--black);background:var(--white);
+}
+textarea{min-height:96px;line-height:1.6}
+select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23757575' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+  padding-right:28px;cursor:pointer;
+}
+input::placeholder,textarea::placeholder{color:var(--gray-300)}
+
+/* Drop zones */
+.dropzone{
+  border:1px solid var(--gray-200);
+  background:var(--gray-50);
+  padding:16px;text-align:center;cursor:pointer;
+  position:relative;transition:all .15s;
+}
+.dropzone:hover,.dropzone.over{border-color:var(--black);background:var(--white)}
+.dropzone input[type=file]{
+  position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;
+}
+.dz-label{font-size:11px;color:var(--gray-500);margin-bottom:4px}
+.dz-label b{color:var(--gray-800);font-weight:600}
+.dz-hint{font-size:10px;color:var(--gray-400)}
+.dz-filename{
+  font-size:10px;font-family:var(--mono);color:var(--gray-700);
+  margin-top:6px;padding:4px 8px;background:var(--gray-100);
+  border:1px solid var(--gray-200);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  display:none;
+}
+.dropzone.has-file{border-color:var(--gray-700);background:var(--white)}
+.dropzone.has-file .dz-filename{display:block}
+
+/* Buttons */
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 16px;
+  font-family:var(--font);font-size:12px;font-weight:600;
+  letter-spacing:.3px;text-transform:uppercase;
+  cursor:pointer;border:none;transition:all .15s;width:100%;
+}
+.btn-primary{background:var(--black);color:var(--white)}
+.btn-primary:hover:not(:disabled){background:var(--gray-800)}
+.btn-primary:disabled{background:var(--gray-300);color:var(--gray-500);cursor:not-allowed}
+.btn-secondary{background:var(--white);color:var(--gray-800);border:1px solid var(--gray-300)}
+.btn-secondary:hover{border-color:var(--black);color:var(--black)}
+.btn-danger{background:var(--white);color:var(--gray-700);border:1px solid var(--gray-300)}
+.btn-danger:hover{background:var(--gray-900);color:var(--white);border-color:var(--gray-900)}
+.btn-sm{padding:6px 12px;font-size:11px}
+.spinner{
+  width:13px;height:13px;
+  border:2px solid rgba(255,255,255,.25);border-top-color:var(--white);
+  border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ═══════════════════════════════════════════
+   MAIN CONTENT
+═══════════════════════════════════════════ */
+.main{display:flex;flex-direction:column;background:var(--gray-50)}
+.tab-bar{
+  display:flex;
+  background:var(--white);
+  border-bottom:1px solid var(--gray-200);
+  padding:0 24px;
+}
+.tab{
+  padding:14px 16px;
+  font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+  color:var(--gray-400);
+  cursor:pointer;border:none;background:none;
+  border-bottom:2px solid transparent;
+  transition:all .15s;margin-bottom:-1px;
+}
+.tab.active{color:var(--black);border-bottom-color:var(--black)}
+.tab:hover:not(.active){color:var(--gray-700)}
+.tab-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;border-radius:0;
+  background:var(--black);color:var(--white);
+  font-size:8px;font-weight:700;
+  margin-left:5px;
+}
+.tab-content{flex:1;overflow:auto}
+.tab-panel{display:none}.tab-panel.active{display:flex;flex-direction:column;height:100%}
+
+/* ═══════════════════════════════════════════
+   DASHBOARD
+═══════════════════════════════════════════ */
+.dashboard{padding:24px;display:flex;flex-direction:column;gap:20px;overflow-y:auto}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--gray-200);border:1px solid var(--gray-200)}
+.stat-card{
+  background:var(--white);padding:20px;
+}
+.stat-icon{font-size:18px;margin-bottom:10px}
+.stat-label{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gray-400);margin-bottom:4px}
+.stat-value{font-size:28px;font-weight:800;color:var(--black);font-family:var(--mono);line-height:1}
+.stat-sub{font-size:10px;color:var(--gray-400);margin-top:4px}
+
+.arch-card{background:var(--white);border:1px solid var(--gray-200);padding:20px}
+.arch-card h4{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gray-500);margin-bottom:14px}
+.arch-flow{display:flex;align-items:center;flex-wrap:wrap;gap:0}
+.arch-node{
+  padding:8px 12px;border:1px solid var(--gray-200);
+  background:var(--white);font-size:10px;font-weight:600;color:var(--gray-700);
+  letter-spacing:.2px;white-space:nowrap;
+}
+.arch-node.active{background:var(--black);color:var(--white);border-color:var(--black)}
+.arch-arrow{font-size:12px;color:var(--gray-300);padding:0 4px;font-family:var(--mono)}
+
+.empty-state{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;color:var(--gray-400);text-align:center;padding:60px 40px;
+}
+.empty-icon{font-size:40px;filter:grayscale(1);opacity:.5}
+.empty-title{font-size:16px;font-weight:700;color:var(--gray-700)}
+.empty-body{font-size:12px;max-width:340px;line-height:1.7;color:var(--gray-500)}
+.tag{
+  display:inline-flex;align-items:center;
+  padding:3px 8px;border:1px solid var(--gray-200);
+  font-size:10px;font-weight:600;color:var(--gray-600);letter-spacing:.2px;
+  margin:2px;
+}
+
+/* ═══════════════════════════════════════════
+   PROGRESS
+═══════════════════════════════════════════ */
+.progress-wrap{padding:24px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+.progress-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--gray-200)}
+.progress-header h2{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.job-id{
+  font-family:var(--mono);font-size:10px;color:var(--gray-500);
+  padding:4px 8px;background:var(--gray-100);border:1px solid var(--gray-200);
+}
+
+.prog-steps{display:flex;flex-direction:column;gap:8px}
+.prog-step{
+  display:flex;align-items:center;gap:14px;
+  background:var(--white);border:1px solid var(--gray-200);
+  padding:14px 16px;transition:border-color .2s;
+}
+.prog-step.active{border-color:var(--black);border-left:3px solid var(--black)}
+.prog-step.done{border-color:var(--gray-300);background:var(--gray-50)}
+.prog-step.err{border-left:3px solid var(--gray-700)}
+.prog-step-icon{
+  width:36px;height:36px;border:1px solid var(--gray-200);
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;background:var(--white);
+}
+.prog-step.active .prog-step-icon{border-color:var(--black);background:var(--gray-50)}
+.prog-step.done  .prog-step-icon{background:var(--gray-100)}
+.prog-step-info{flex:1}
+.prog-step-name{font-size:12px;font-weight:700;color:var(--gray-800);text-transform:uppercase;letter-spacing:.3px}
+.prog-step-msg{font-size:11px;color:var(--gray-400);margin-top:2px}
+.prog-bar-wrap{height:2px;background:var(--gray-100);margin-top:8px;overflow:hidden}
+.prog-bar{height:100%;background:var(--black);transition:width .4s ease;width:0%}
+.prog-step.done .prog-bar{width:100%;background:var(--gray-500)}
+.prog-pct{font-size:11px;font-weight:700;color:var(--gray-600);min-width:32px;text-align:right;font-family:var(--mono)}
+
+.log-panel{background:var(--white);border:1px solid var(--gray-200)}
+.log-header{padding:10px 14px;border-bottom:1px solid var(--gray-100);font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gray-500)}
+.log-body{
+  padding:12px 14px;font-family:var(--mono);font-size:10px;
+  color:var(--gray-600);max-height:180px;overflow-y:auto;line-height:1.9;
+}
+.log-info{color:var(--gray-700)}.log-ok{color:var(--black)}.log-warn{color:var(--gray-600)}.log-err{color:var(--black);font-weight:600}
+
+/* ═══════════════════════════════════════════
+   RESULTS
+═══════════════════════════════════════════ */
+.results-wrap{display:flex;flex-direction:column;height:100%}
+.results-toolbar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:12px 24px;
+  background:var(--white);border-bottom:1px solid var(--gray-200);
+}
+.results-title{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-800);flex:1}
+.search-input-wrap{
+  display:flex;align-items:center;
+  border:1px solid var(--gray-200);background:var(--white);
+  transition:border-color .15s;
+}
+.search-input-wrap:focus-within{border-color:var(--black)}
+.search-icon{padding:0 8px;font-size:12px;color:var(--gray-400)}
+.search-input-wrap input{border:none;background:none;width:200px;font-size:11px;padding:7px 8px 7px 0}
+.filter-select{
+  border:1px solid var(--gray-200);background:var(--white);
+  font-size:11px;padding:7px 26px 7px 10px;color:var(--gray-700);cursor:pointer;
+  border-radius:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23757575' stroke-width='1.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+  appearance:none;
+}
+.export-btn{
+  padding:7px 14px;
+  font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;
+  background:var(--black);color:var(--white);border:none;cursor:pointer;
+  transition:background .15s;
+}
+.export-btn:hover{background:var(--gray-800)}
+
+/* Score distribution bar */
+.dist-bar-wrap{display:flex;height:3px;background:var(--gray-100);margin:0 24px}
+.dist-seg{height:100%;transition:width .5s ease}
+.dist-a{background:var(--black)}
+.dist-b{background:var(--gray-700)}
+.dist-c{background:var(--gray-400)}
+.dist-d{background:var(--gray-300)}
+.dist-e{background:var(--gray-200)}
+
+.results-table-wrap{flex:1;overflow:auto;padding:0 24px 24px}
+table{width:100%;border-collapse:collapse;border:1px solid var(--gray-200)}
+thead{background:var(--gray-100)}
+thead th{
+  padding:10px 12px;
+  font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--gray-500);text-align:left;
+  border-right:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);
+  cursor:pointer;user-select:none;white-space:nowrap;
+}
+thead th:last-child{border-right:none}
+thead th:hover{background:var(--gray-150);color:var(--gray-800)}
+tbody tr{background:var(--white);transition:background .1s;cursor:pointer}
+tbody tr:hover{background:var(--gray-50)}
+tbody tr:not(:last-child){border-bottom:1px solid var(--gray-100)}
+td{padding:11px 12px;font-size:12px;border-right:1px solid var(--gray-100)}
+td:last-child{border-right:none}
+
+.rank-num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;
+  font-size:10px;font-weight:800;font-family:var(--mono);
+  border:1px solid var(--gray-200);color:var(--gray-600);
+}
+.rank-num.top{background:var(--black);color:var(--white);border-color:var(--black)}
+
+.score-chip{
+  display:inline-flex;align-items:center;padding:3px 8px;
+  font-size:11px;font-weight:700;font-family:var(--mono);
+  border:1px solid;
+}
+.score-a{background:#f5f5f5;color:#000;border-color:#000}
+.score-b{background:#f5f5f5;color:#212121;border-color:#424242}
+.score-c{background:#f5f5f5;color:#424242;border-color:#757575}
+.score-d{background:#f5f5f5;color:#757575;border-color:#9e9e9e}
+.score-e{background:#f5f5f5;color:#9e9e9e;border-color:#bdbdbd}
+
+.skill-tag{
+  display:inline-flex;align-items:center;
+  padding:1px 6px;border:1px solid var(--gray-200);
+  font-size:9px;font-weight:600;color:var(--gray-600);
+  background:var(--gray-50);letter-spacing:.2px;
+  margin:1px;
+}
+.skill-tag.miss{background:var(--gray-100);color:var(--gray-700);border-style:dashed}
+
+.gh-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 7px;border:1px solid var(--gray-200);
+  font-size:10px;font-weight:600;color:var(--gray-600);
+}
+.gh-chip.verified{border-color:var(--gray-700);color:var(--gray-800)}
+
+/* ═══════════════════════════════════════════
+   QUICK SCORE
+═══════════════════════════════════════════ */
+.qs-wrap{padding:24px;max-width:600px;display:flex;flex-direction:column;gap:16px;overflow-y:auto}
+.qs-header h2{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.qs-header p{font-size:12px;color:var(--gray-500)}
+.result-card{background:var(--white);border:1px solid var(--gray-200);padding:24px}
+.score-display{display:flex;align-items:flex-start;gap:24px;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--gray-100)}
+.big-score{font-size:56px;font-weight:900;color:var(--black);font-family:var(--mono);line-height:1}
+.big-score-label{font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-400);margin-top:4px}
+.candidate-info{flex:1}
+.candidate-name{font-size:16px;font-weight:700;color:var(--black)}
+.candidate-meta{font-size:11px;color:var(--gray-500);margin-top:2px}
+.score-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--gray-200);border:1px solid var(--gray-200);margin-bottom:16px}
+.score-blk{background:var(--white);padding:12px;text-align:center}
+.score-blk-val{font-size:22px;font-weight:800;color:var(--black);font-family:var(--mono)}
+.score-blk-lbl{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-400);margin-top:3px}
+.skills-section{margin-bottom:12px}
+.skills-label{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--gray-400);margin-bottom:6px}
+.chips-wrap{display:flex;flex-wrap:wrap;gap:2px}
+
+/* ═══════════════════════════════════════════
+   MODAL
+═══════════════════════════════════════════ */
+.modal-overlay{
+  position:fixed;inset:0;z-index:500;
+  background:rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{
+  background:var(--white);
+  border:1px solid var(--gray-300);
+  width:min(720px,96vw);max-height:90vh;overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,.2);
+  transform:translateY(12px);transition:transform .2s;
+}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 24px;
+  border-bottom:1px solid var(--gray-200);
+  position:sticky;top:0;background:var(--white);z-index:1;
+}
+.modal-title-block{}
+.modal-name{font-size:16px;font-weight:700;color:var(--black)}
+.modal-sub{font-size:11px;color:var(--gray-500);margin-top:3px}
+.modal-close{
+  width:28px;height:28px;border:1px solid var(--gray-200);
+  background:var(--white);cursor:pointer;font-size:14px;color:var(--gray-500);
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.modal-close:hover{background:var(--black);color:var(--white);border-color:var(--black)}
+.modal-content{padding:24px;display:flex;flex-direction:column;gap:20px}
+
+.modal-section{}
+.modal-section-title{
+  font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  color:var(--gray-400);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--gray-100);
+}
+.score-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--gray-200);border:1px solid var(--gray-200)}
+.score-cell{background:var(--white);padding:16px;text-align:center}
+.score-cell-val{font-size:32px;font-weight:900;color:var(--black);font-family:var(--mono);line-height:1}
+.score-cell-lbl{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-400);margin-top:5px}
+.score-cell.na .score-cell-val{font-size:14px;color:var(--gray-400);font-weight:400}
+
+.proj-item{border:1px solid var(--gray-200);margin-bottom:6px}
+.proj-item-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--gray-50);border-bottom:1px solid var(--gray-100)}
+.proj-item-name{font-size:12px;font-weight:700;color:var(--black)}
+.proj-badge{font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:2px 7px;border:1px solid}
+.proj-badge.verified{border-color:var(--gray-700);color:var(--gray-800)}
+.proj-badge.uncertain{border-color:var(--gray-400);color:var(--gray-600)}
+.proj-badge.unverified{border-color:var(--gray-300);color:var(--gray-400)}
+.proj-item-body{padding:10px 12px;display:flex;gap:16px;flex-wrap:wrap}
+.proj-meta-item{font-size:10px;color:var(--gray-500);display:flex;gap:4px}
+.proj-meta-item b{color:var(--gray-800);font-weight:600}
+
+.gh-cat-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.gh-cat-name{font-size:10px;color:var(--gray-600);width:160px;flex-shrink:0}
+.gh-cat-bar-wrap{flex:1;height:4px;background:var(--gray-100);overflow:hidden}
+.gh-cat-bar{height:100%;background:var(--black);transition:width .3s}
+.gh-cat-val{font-size:10px;font-weight:700;font-family:var(--mono);color:var(--gray-600);width:28px;text-align:right}
+
+.explain-box{
+  padding:12px;background:var(--gray-50);border:1px solid var(--gray-100);
+  font-family:var(--mono);font-size:10px;color:var(--gray-600);line-height:1.8;
+}
+
+/* ═══════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════ */
+.divider{height:1px;background:var(--gray-200)}
+.mt-4{margin-top:4px}.mt-8{margin-top:8px}.mt-12{margin-top:12px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .25s ease}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ TOPBAR ═══════════ -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-mark">H</div>
+    <span class="logo-name">HireFlow <span style="font-weight:300">Lite</span></span>
+    <span class="logo-ver">ATS v3</span>
+  </div>
+  <nav class="nav-links">
+    <button class="nav-btn active" onclick="goTab('dashboard')">Dashboard</button>
+    <button class="nav-btn" onclick="goTab('progress')">Progress</button>
+    <button class="nav-btn" onclick="goTab('results')">Results</button>
+    <button class="nav-btn" onclick="goTab('quickscore')">Quick Score</button>
+  </nav>
+  <div class="nav-status">
+    <div class="status-indicator">
+      <div class="status-dot" id="sdot"></div>
+      <span id="stxt" style="font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase">Connecting</span>
+    </div>
+    <span class="gpu-tag" id="gpuTag"></span>
+  </div>
+</header>
+
+<!-- ═══════════ LAYOUT ═══════════ -->
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+
+  <!-- Pipeline steps -->
+  <div class="sidebar-section">
+    <div class="section-label">Pipeline</div>
+    <div class="step-list">
+      <div class="step-row">
+        <div class="step-circle active" id="sc1"><span>1</span></div>
+        <div class="step-text">
+          <div class="step-name">Ingest</div>
+          <div class="step-desc">CSV + resumes → DB</div>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-circle" id="sc2"><span>2</span></div>
+        <div class="step-text">
+          <div class="step-name">Search</div>
+          <div class="step-desc">JD → rank candidates</div>
+        </div>
+      </div>
+      <div class="step-row">
+        <div class="step-circle" id="sc3"><span>3</span></div>
+        <div class="step-text">
+          <div class="step-name">Results</div>
+          <div class="step-desc">View & export</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DB -->
+  <div class="sidebar-section">
+    <div class="section-label">Database</div>
+    <div class="db-stat-row">
+      <div>
+        <div class="stat-label" style="font-size:9px">Indexed Students</div>
+        <div class="db-stat-val" id="dbCount">—</div>
+      </div>
+      <div style="text-align:right">
+        <div class="stat-label" style="font-size:9px">Avg Score</div>
+        <div class="db-stat-sub" id="dbAvg">—</div>
+      </div>
+    </div>
+    <div class="mt-8">
+      <button class="btn btn-danger btn-sm" onclick="resetDB()">Reset Database</button>
+    </div>
+  </div>
+
+  <!-- INGEST -->
+  <div class="sidebar-section">
+    <div class="section-label">Step 1 — Ingest</div>
+
+    <div class="form-row">
+      <label class="form-label">Google Forms CSV <span class="req">*</span></label>
+      <div class="dropzone" id="csvDz">
+        <input type="file" id="csvFile" accept=".csv" onchange="onFile('csvFile','csvDz','csvFn')"/>
+        <div class="dz-label">Drop <b>responses.csv</b> or click</div>
+        <div class="dz-hint">roll_number, name, github_url, github_token</div>
+        <div class="dz-filename" id="csvFn"></div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">Resumes ZIP <span class="req">*</span> <span class="opt">filenames = roll numbers</span></label>
+      <div class="dropzone" id="zipDz">
+        <input type="file" id="zipFile" accept=".zip" onchange="onFile('zipFile','zipDz','zipFn')"/>
+        <div class="dz-label">Drop <b>resumes.zip</b> or click</div>
+        <div class="dz-hint">23CS001.pdf, 23CS002.docx, ...</div>
+        <div class="dz-filename" id="zipFn"></div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">Workers</label>
+      <select id="wkrs">
+        <option value="2">2 Workers — Safe</option>
+        <option value="4" selected>4 Workers — Default</option>
+        <option value="8">8 Workers — Fast</option>
+        <option value="16">16 Workers — Maximum</option>
+      </select>
+    </div>
+
+    <button class="btn btn-primary" id="ingestBtn" onclick="startIngest()">
+      Ingest Students
+    </button>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="sidebar-section">
+    <div class="section-label">Step 2 — Search</div>
+
+    <div class="form-row">
+      <label class="form-label">Job Description <span class="req">*</span></label>
+      <textarea id="jdTxt" placeholder="We are hiring a Senior Backend Engineer with Java, Spring Boot, REST APIs, Docker, Kubernetes, AWS...&#10;&#10;Requirements:&#10;— 3+ years experience&#10;— Strong Java expertise..."></textarea>
+    </div>
+
+    <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div>
+        <label class="form-label">Top K</label>
+        <select id="topK">
+          <option value="20">Top 20</option>
+          <option value="50" selected>Top 50</option>
+          <option value="100">Top 100</option>
+          <option value="200">Top 200</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">GitHub</label>
+        <select id="ghVerify">
+          <option value="true">Verify</option>
+          <option value="false">Skip</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="form-label">Fallback Token <span class="opt">global PAT</span></label>
+      <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx"/>
+    </div>
+
+    <button class="btn btn-primary" id="searchBtn" onclick="startSearch()">
+      Search &amp; Rank
+    </button>
+  </div>
+
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <div class="tab-bar">
+    <button class="tab active" id="tab-dashboard"  onclick="goTab('dashboard')">Dashboard</button>
+    <button class="tab" id="tab-progress"   onclick="goTab('progress')">Progress</button>
+    <button class="tab" id="tab-results"    onclick="goTab('results')">Results<span class="tab-badge" id="resBadge" style="display:none"></span></button>
+    <button class="tab" id="tab-quickscore" onclick="goTab('quickscore')">Quick Score</button>
+  </div>
+
+  <div class="tab-content">
+
+    <!-- DASHBOARD -->
+    <div class="tab-panel active" id="tp-dashboard">
+      <div class="dashboard">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-icon">&#x1F465;</div><div class="stat-label">Indexed</div><div class="stat-value" id="stTotal">—</div><div class="stat-sub">students in database</div></div>
+          <div class="stat-card"><div class="stat-icon">&#x1F3C6;</div><div class="stat-label">Top Score</div><div class="stat-value" id="stTop">—</div><div class="stat-sub">this session</div></div>
+          <div class="stat-card"><div class="stat-icon">&#x2605;</div><div class="stat-label">Average</div><div class="stat-value" id="stAvg">—</div><div class="stat-sub">shortlist average</div></div>
+          <div class="stat-card"><div class="stat-icon">&#x1F4BB;</div><div class="stat-label">GH Verified</div><div class="stat-value" id="stGH">—</div><div class="stat-sub">profiles verified</div></div>
+        </div>
+
+        <div class="arch-card">
+          <h4>System Architecture</h4>
+          <div class="arch-flow">
+            <div class="arch-node">CSV Input</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">Roll # Match</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">Parse PDF/DOCX</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">MiniLM Embed (384d)</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">sqlite-vec</div>
+            <div style="width:100%;height:8px"></div>
+            <div class="arch-node">JD Query</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">Vector KNN</div><div class="arch-arrow">+</div>
+            <div class="arch-node">BM25 FTS5</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">RRF Fusion</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">GitHub Verify</div><div class="arch-arrow">&rarr;</div>
+            <div class="arch-node">Ranked Output</div>
+          </div>
+        </div>
+
+        <div class="empty-state" id="dashEmpty">
+          <div class="empty-icon">&#x1F4CB;</div>
+          <div class="empty-title">No Data Yet</div>
+          <div class="empty-body">Upload your Google Forms CSV alongside a ZIP of student resumes. Resumes must be named by roll number (e.g. 23CS001.pdf).</div>
+          <div style="margin-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:4px">
+            <span class="tag">CSV Input</span><span class="tag">Roll # PK</span>
+            <span class="tag">sqlite-vec</span><span class="tag">BM25 + RRF</span>
+            <span class="tag">Per-Student GitHub Token</span><span class="tag">GPU Embeddings</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROGRESS -->
+    <div class="tab-panel" id="tp-progress">
+      <div class="progress-wrap">
+        <div class="progress-header">
+          <h2>Job Progress</h2>
+          <div class="job-id" id="jobId">No active job</div>
+        </div>
+        <div class="prog-steps" id="progSteps"></div>
+        <div class="log-panel">
+          <div class="log-header">Live Log</div>
+          <div class="log-body" id="logBody">Waiting for pipeline to start...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="tab-panel" id="tp-results">
+      <div class="results-wrap">
+        <div class="results-toolbar">
+          <span class="results-title">Ranked Candidates</span>
+          <div class="search-input-wrap">
+            <span class="search-icon">&#x1F50D;</span>
+            <input type="text" id="srch" placeholder="Search name, roll no, email..." oninput="filterRes()"/>
+          </div>
+          <select class="filter-select" id="scoreFlt" onchange="filterRes()">
+            <option value="">All Scores</option>
+            <option value="90">90+ Excellent</option>
+            <option value="70">70+ Strong</option>
+            <option value="50">50+ Moderate</option>
+          </select>
+          <button class="export-btn" onclick="exportCSV()">&#x2193; Export CSV</button>
+        </div>
+        <div class="dist-bar-wrap" id="distBar" style="display:none">
+          <div class="dist-seg dist-a" id="da"></div>
+          <div class="dist-seg dist-b" id="db"></div>
+          <div class="dist-seg dist-c" id="dc"></div>
+          <div class="dist-seg dist-d" id="dd"></div>
+          <div class="dist-seg dist-e" id="de"></div>
+        </div>
+        <div class="results-table-wrap" id="resWrap">
+          <div class="empty-state">
+            <div class="empty-icon">&#x1F4CB;</div>
+            <div class="empty-title">No Results</div>
+            <div class="empty-body">Run a search to see ranked candidates here.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUICK SCORE -->
+    <div class="tab-panel" id="tp-quickscore">
+      <div class="qs-wrap">
+        <div class="qs-header">
+          <h2>Quick Score</h2>
+          <p>Instantly score a single resume against a job description without touching the database.</p>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Job Description <span class="req">*</span></label>
+          <textarea id="qsJD" placeholder="Paste job description here..."></textarea>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Resume File <span class="req">*</span> <span class="opt">PDF or DOCX</span></label>
+          <div class="dropzone" id="qsDz">
+            <input type="file" id="qsFile" accept=".pdf,.docx" onchange="onFile('qsFile','qsDz','qsFn')"/>
+            <div class="dz-label">Drop resume or click to browse</div>
+            <div class="dz-filename" id="qsFn"></div>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="qsBtn" onclick="runQS()">Score Resume</button>
+        <div id="qsResult"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-topbar">
+      <div class="modal-title-block">
+        <div class="modal-name" id="mName"></div>
+        <div class="modal-sub" id="mSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeM()">&#x2715;</button>
+    </div>
+    <div class="modal-content" id="mContent"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const API = location.origin;
+let allResults = [], es = null;
+
+/* ── Tab routing ─────────────────────────────────────────────────────── */
+function goTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab,.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tp-' + name).classList.add('active');
+  document.getElementById('tab-' + name)?.classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    if (b.textContent.toLowerCase().replace(' ','').includes(name.replace('quickscore','quick')))
+      b.classList.add('active');
+  });
+}
+
+/* ── Health ──────────────────────────────────────────────────────────── */
+async function checkHealth() {
+  try {
+    const d = await fetch(API + '/api/health').then(r => r.json());
+    document.getElementById('sdot').className = 'status-dot online';
+    document.getElementById('stxt').textContent = 'Online';
+    document.getElementById('gpuTag').textContent = d.gpu !== 'No GPU' ? d.gpu : '';
+    const s = d.db_stats || {};
+    document.getElementById('dbCount').textContent = s.total ?? '0';
+    document.getElementById('dbAvg').textContent = (s.avg_score || 0).toFixed(1);
+  } catch {
+    document.getElementById('sdot').className = 'status-dot';
+    document.getElementById('stxt').textContent = 'Offline';
+  }
+}
+addEventListener('DOMContentLoaded', () => { checkHealth(); setInterval(checkHealth, 8000); setupDZ(); });
+
+/* ── File drop zones ─────────────────────────────────────────────────── */
+function onFile(fId, dId, nId) {
+  const f = document.getElementById(fId).files[0];
+  const dz = document.getElementById(dId);
+  const fn = document.getElementById(nId);
+  if (f) { dz.classList.add('has-file'); fn.textContent = f.name; fn.style.display = 'block'; }
+  else { dz.classList.remove('has-file'); fn.style.display = 'none'; }
+}
+function setupDZ() {
+  document.querySelectorAll('.dropzone').forEach(dz => {
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); });
+  });
+}
+
+/* ── Steps ───────────────────────────────────────────────────────────── */
+const INGEST_STEPS = [
+  { id: 'parse',  icon: '&#x1F50D;', name: 'Parse Resumes'       },
+  { id: 'embed',  icon: '&#x1F9E0;', name: 'Generate Embeddings'  },
+  { id: 'write',  icon: '&#x1F4BE;', name: 'Write to Database'    },
+];
+const SEARCH_STEPS = [
+  { id: 'embed_jd', icon: '&#x1F4C4;', name: 'Embed Job Description'  },
+  { id: 'rrf',      icon: '&#x26A1;',  name: 'Vector + BM25 + RRF'    },
+  { id: 'score',    icon: '&#x1F3AF;', name: 'Skill Scoring'           },
+  { id: 'github',   icon: '&#x1F4BB;', name: 'GitHub Verification'     },
+];
+
+function buildSteps(steps) {
+  document.getElementById('progSteps').innerHTML = steps.map(s => `
+    <div class="prog-step" id="ps-${s.id}">
+      <div class="prog-step-icon">${s.icon}</div>
+      <div class="prog-step-info">
+        <div class="prog-step-name">${s.name}</div>
+        <div class="prog-step-msg" id="pm-${s.id}">Waiting...</div>
+        <div class="prog-bar-wrap"><div class="prog-bar" id="pb-${s.id}"></div></div>
+      </div>
+      <div class="prog-pct" id="pp-${s.id}">—</div>
+    </div>`).join('');
+}
+function setStep(id, state, pct, msg) {
+  const el = document.getElementById('ps-' + id); if (!el) return;
+  el.className = 'prog-step ' + (state || '');
+  if (pct !== undefined) {
+    document.getElementById('pb-' + id).style.width = pct + '%';
+    document.getElementById('pp-' + id).textContent = pct + '%';
+  }
+  if (msg) document.getElementById('pm-' + id).textContent = msg;
+}
+function addLog(level, msg) {
+  const b = document.getElementById('logBody');
+  const t = new Date().toLocaleTimeString();
+  const cls = level === 'error' ? 'log-err' : level === 'warn' ? 'log-warn' : level === 'ok' ? 'log-ok' : 'log-info';
+  b.innerHTML += `<span class="${cls}">[${t}]  ${esc(msg)}</span>\n`;
+  b.scrollTop = b.scrollHeight;
+}
+
+/* ── SSE streaming ───────────────────────────────────────────────────── */
+function streamJob(jobId, onDone) {
+  if (es) { es.close(); es = null; }
+  es = new EventSource(`${API}/api/jobs/${jobId}/stream`);
+  es.onmessage = e => {
+    try { handleMsg(JSON.parse(e.data), onDone); } catch {}
+  };
+  es.onerror = () => {
+    addLog('warn', 'Connection interrupted — polling...');
+    es.close(); es = null;
+    setTimeout(() => pollJob(jobId, onDone), 2500);
+  };
+}
+async function pollJob(id, cb) {
+  const r = await fetch(`${API}/api/jobs/${id}/result`).then(r => r.json());
+  if (r.status === 'done') cb(r.result);
+  else if (r.status === 'error') addLog('error', r.error || 'Unknown error');
+  else setTimeout(() => pollJob(id, cb), 3000);
+}
+function handleMsg(m, onDone) {
+  const { type, data } = m;
+  if (type === 'progress') {
+    setStep(data.phase, data.done === data.total ? 'done' : 'active', data.pct, data.message || '');
+  } else if (type === 'log') {
+    addLog(data.level || 'info', data.msg);
+  } else if (type === 'done') {
+    onDone(data);
+    if (es) { es.close(); es = null; }
+  } else if (type === 'error') {
+    addLog('error', data.message);
+    if (es) { es.close(); es = null; }
+  }
+}
+
+/* ── Ingest ──────────────────────────────────────────────────────────── */
+async function startIngest() {
+  const csv = document.getElementById('csvFile').files[0];
+  const zip = document.getElementById('zipFile').files[0];
+  if (!csv || !zip) { alert('Please select both a CSV file and a resumes ZIP.'); return; }
+
+  const form = new FormData();
+  form.append('csv_file', csv);
+  form.append('resumes', zip);
+  form.append('workers', document.getElementById('wkrs').value);
+
+  setStepCircle('sc1', 'active');
+  document.getElementById('ingestBtn').disabled = true;
+  document.getElementById('logBody').innerHTML = '';
+  buildSteps(INGEST_STEPS);
+  goTab('progress');
+
+  const r = await fetch(`${API}/api/ingest`, { method: 'POST', body: form }).then(r => r.json());
+  document.getElementById('jobId').textContent = 'Job: ' + r.job_id;
+  addLog('ok', 'Ingestion started — Job ID: ' + r.job_id);
+
+  streamJob(r.job_id, stats => {
+    addLog('ok', `Complete — ${stats.written_to_db} students indexed in ${stats.total_time_s}s`);
+    setStepCircle('sc1', 'done');
+    document.getElementById('ingestBtn').disabled = false;
+    checkHealth();
+  });
+}
+
+/* ── Search ──────────────────────────────────────────────────────────── */
+async function startSearch() {
+  const jd = document.getElementById('jdTxt').value.trim();
+  if (!jd) { alert('Please enter a Job Description.'); return; }
+  const cnt = parseInt(document.getElementById('dbCount').textContent) || 0;
+  if (cnt === 0) { alert('Database is empty. Please ingest students first.'); return; }
+
+  const form = new FormData();
+  form.append('jd', jd);
+  form.append('top_k', document.getElementById('topK').value);
+  form.append('github_verify', document.getElementById('ghVerify').value);
+  form.append('github_token', document.getElementById('ghToken').value);
+
+  setStepCircle('sc2', 'active');
+  document.getElementById('searchBtn').disabled = true;
+  document.getElementById('logBody').innerHTML = '';
+  buildSteps(SEARCH_STEPS);
+  goTab('progress');
+
+  const r = await fetch(`${API}/api/search`, { method: 'POST', body: form }).then(r => r.json());
+  document.getElementById('jobId').textContent = 'Job: ' + r.job_id;
+  addLog('ok', 'Search started — Job ID: ' + r.job_id);
+
+  streamJob(r.job_id, summary => {
+    addLog('ok', `Ranked ${summary.total} candidates. Top: ${summary.top_score}`);
+    setStepCircle('sc2', 'done'); setStepCircle('sc3', 'done');
+    document.getElementById('searchBtn').disabled = false;
+    allResults = summary.candidates || [];
+    renderResults(allResults);
+    renderDist(summary.distribution || {});
+    const b = document.getElementById('resBadge');
+    b.textContent = allResults.length; b.style.display = 'inline-flex';
+    document.getElementById('stTop').textContent = summary.top_score;
+    document.getElementById('stAvg').textContent = summary.avg_score;
+    document.getElementById('stGH').textContent = summary.gh_verified;
+    document.getElementById('stTotal').textContent = summary.total;
+    document.getElementById('dashEmpty').style.display = 'none';
+    setTimeout(() => goTab('results'), 600);
+  });
+}
+
+function setStepCircle(id, state) {
+  const el = document.getElementById(id);
+  el.className = 'step-circle ' + state;
+  if (state === 'done') el.innerHTML = '';
+}
+
+/* ── Results rendering ───────────────────────────────────────────────── */
+function scoreClass(s) {
+  return s >= 90 ? 'score-a' : s >= 70 ? 'score-b' : s >= 50 ? 'score-c' : s >= 30 ? 'score-d' : 'score-e';
+}
+function scoreColour(s) {
+  /* Returns a CSS colour string matching the score tier. */
+  return s >= 90 ? '#22c55e' : s >= 70 ? '#84cc16' : s >= 50 ? '#f59e0b' : s >= 30 ? '#f97316' : '#ef4444';
+}
+function renderResults(cands) {
+  const w = document.getElementById('resWrap');
+  if (!cands.length) {
+    w.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x1F4CB;</div><div class="empty-title">No Results</div></div>';
+    return;
+  }
+  w.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Rank</th>
+        <th>Roll No</th>
+        <th>Name</th>
+        <th onclick="sortBy('ats_score')" title="ATS Score: How well this candidate matches the Job Description (0-100)">ATS Score &#x21D5;</th>
+        <th onclick="sortBy('github_score')" title="GitHub Score: How credible the candidate's technical evidence is (0-100)">GitHub &#x21D5;</th>
+        <th onclick="sortBy('composite_score')" title="Composite: 65% ATS + 35% GitHub — display-only ranking blend">Composite &#x21D5;</th>
+        <th>Matched Skills</th>
+        <th>Projects</th>
+      </tr></thead>
+      <tbody id="resBody"></tbody>
+    </table>`;
+  populateRows(cands);
+}
+function populateRows(cands) {
+  const body = document.getElementById('resBody'); if (!body) return;
+  body.innerHTML = cands.map(c => {
+    const isTop = c.rank <= 3;
+    const ghChip = c.github_score != null
+      ? `<span class="gh-chip verified">&#x2713; ${c.github_score.toFixed(1)}</span>`
+      : `<span class="gh-chip">—</span>`;
+    const compositeScore = c.composite_score != null ? c.composite_score : (c.final_score || c.ats_score || 0);
+    const skills = (c.matched_skills || []).slice(0, 5)
+      .map(s => `<span class="skill-tag">${esc(s)}</span>`).join('');
+    const pv = c.project_verif || c.project_verification || [];
+    const verifiedProjs = pv.filter ? pv.filter(p => p.status === 'verified').length : 0;
+    const pvStr = pv.length ? `${verifiedProjs}/${pv.length} verified` : `${c.projects_total || 0} listed`;
+    return `
+      <tr onclick="openModal(${c.rank - 1})">
+        <td><span class="rank-num ${isTop ? 'top' : ''}">${c.rank}</span></td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--gray-600)">${esc(c.roll_number || '—')}</td>
+        <td>
+          <div style="font-weight:600;font-size:12px">${esc(c.name || 'Unknown')}</div>
+          <div style="font-size:10px;color:var(--gray-400)">${esc(c.email || '')}</div>
+        </td>
+        <td><span class="score-chip ${scoreClass(c.ats_score || 0)}" title="ATS Score">${(c.ats_score || 0).toFixed(1)}</span></td>
+        <td>${ghChip}</td>
+        <td><span class="score-chip ${scoreClass(compositeScore)}" style="font-size:13px;font-weight:800" title="Composite (65% ATS + 35% GitHub)">${compositeScore.toFixed(1)}</span></td>
+        <td>${skills || '<span style="color:var(--gray-300);font-size:11px">—</span>'}</td>
+        <td style="font-size:10px;color:var(--gray-500)">${pvStr}</td>
+      </tr>`;
+  }).join('');
+}
+function renderDist(d) {
+  const total = Object.values(d).reduce((a, b) => a + b, 0) || 1;
+  const pct = n => ((n / total) * 100).toFixed(1) + '%';
+  document.getElementById('da').style.width = pct(d.excellent || 0);
+  document.getElementById('db').style.width = pct(d.strong   || 0);
+  document.getElementById('dc').style.width = pct(d.moderate || 0);
+  document.getElementById('dd').style.width = pct(d.weak     || 0);
+  document.getElementById('de').style.width = pct(d.poor     || 0);
+  document.getElementById('distBar').style.display = 'flex';
+}
+
+let sortCol = 'rank', sortAsc = true;
+function sortBy(col) { if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = false; } filterRes(); }
+function filterRes() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  const ms = parseFloat(document.getElementById('scoreFlt').value) || 0;
+  // When filtering by minimum score, use composite (the display rank score)
+  let f = allResults.filter(c =>
+    (!q || (c.name||'').toLowerCase().includes(q) || (c.roll_number||'').toLowerCase().includes(q) || (c.email||'').toLowerCase().includes(q))
+    && ((c.composite_score || c.final_score || c.ats_score || 0) >= ms)
+  );
+  f = f.sort((a, b) => {
+    // For composite_score sort: fall back to final_score then ats_score
+    const av = sortCol === 'composite_score'
+      ? (a.composite_score ?? a.final_score ?? a.ats_score ?? -1)
+      : (a[sortCol] ?? -1);
+    const bv = sortCol === 'composite_score'
+      ? (b.composite_score ?? b.final_score ?? b.ats_score ?? -1)
+      : (b[sortCol] ?? -1);
+    return sortAsc ? av - bv : bv - av;
+  });
+  populateRows(f);
+}
+function exportCSV() {
+  if (!allResults.length) return;
+  const cols = ['rank','roll_number','name','email','ats_score','github_score','composite_score','final_score','matched_skills','missing_skills'];
+  const rows = [cols.join(',')];
+  allResults.forEach(c => {
+    rows.push(cols.map(col => {
+      let v = c[col]; if (Array.isArray(v)) v = v.join('; '); if (v == null) v = '';
+      return `"${String(v).replace(/"/g,'""')}"`;
+    }).join(','));
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+  a.download = `hireflow_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+/* ── Modal ───────────────────────────────────────────────────────────── */
+function openModal(idx) {
+  const c = allResults[idx]; if (!c) return;
+  document.getElementById('mName').textContent = c.name || 'Unknown';
+  document.getElementById('mSub').innerHTML = [
+    c.roll_number ? `&#x1F393; ${esc(c.roll_number)}` : '',
+    c.email ? `&#x2709; ${esc(c.email)}` : '',
+    c.github_username ? `<a href="https://github.com/${encodeURIComponent(c.github_username)}" target="_blank" style="color:var(--black)">github.com/${esc(c.github_username)}</a>` : '',
+  ].filter(Boolean).join('  &nbsp;&middot;&nbsp;  ');
+
+  const pv = c.project_verification || [];
+  const ghv = c.github_verification || {};
+  const cats = ghv.category_scores || c.github_details || {};
+
+  document.getElementById('mContent').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-section-title">Scores</div>
+      <div class="score-3col">
+        <div class="score-cell" title="ATS Score: measures how well this candidate matches the job description.&#10;Unchanged by GitHub verification.">
+          <div class="score-cell-val" style="color:${scoreColour(c.ats_score||0)}">${(c.ats_score||0).toFixed(1)}</div>
+          <div class="score-cell-lbl">ATS Score</div>
+          <div style="font-size:9px;color:var(--gray-400);margin-top:2px">JD fit</div>
+        </div>
+        <div class="score-cell ${c.github_score==null?'na':''}" title="GitHub Score: measures credibility of technical evidence on GitHub.&#10;Independent from ATS score.">
+          <div class="score-cell-val" style="${c.github_score!=null?'color:'+scoreColour(c.github_score):''}"> ${c.github_score!=null?c.github_score.toFixed(1):'Not Verified'}</div>
+          <div class="score-cell-lbl">GitHub Score</div>
+          <div style="font-size:9px;color:var(--gray-400);margin-top:2px">tech credibility</div>
+        </div>
+        <div class="score-cell" title="Composite: 65% ATS + 35% GitHub. Display-only blend for ranking.&#10;ATS and GitHub scores are preserved independently.">
+          <div class="score-cell-val" style="font-weight:900;color:${scoreColour(c.composite_score||c.final_score||c.ats_score||0)}">${(c.composite_score||c.final_score||c.ats_score||0).toFixed(1)}</div>
+          <div class="score-cell-lbl">Composite</div>
+          <div style="font-size:9px;color:var(--gray-400);margin-top:2px">65% ATS + 35% GH</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-title">Skills Analysis</div>
+      <div style="margin-bottom:8px;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-400)">Matched</div>
+      <div class="chips-wrap">${(c.matched_skills||[]).map(s=>`<span class="skill-tag">${esc(s)}</span>`).join('')||'<span style="color:var(--gray-300);font-size:11px">None matched</span>'}</div>
+      <div style="margin-top:10px;margin-bottom:8px;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--gray-400)">Missing</div>
+      <div class="chips-wrap">${(c.missing_skills||[]).map(s=>`<span class="skill-tag miss">${esc(s)}</span>`).join('')||'<span style="color:var(--gray-600);font-size:11px">&#x2713; No missing required skills</span>'}</div>
+    </div>
+
+    ${pv.length ? `
+    <div class="modal-section">
+      <div class="modal-section-title">Project Verification</div>
+      ${pv.map(p=>`
+        <div class="proj-item">
+          <div class="proj-item-header">
+            <div class="proj-item-name">${esc(p.claimed_project||'')}</div>
+            <span class="proj-badge ${p.status}">${p.status==='verified'?'&#x2713; Verified':p.status==='uncertain'?'? Uncertain':'&#x2715; Unverified'}</span>
+          </div>
+          ${p.matched_repo?`<div class="proj-item-body" style="background:var(--gray-50);padding:8px 12px;border-top:1px solid var(--gray-100);font-size:10px;color:var(--gray-500)">Matched repository: <strong style="color:var(--gray-800)">${esc(p.matched_repo)}</strong></div>`:''} 
+          <div class="proj-item-body">
+            ${p.total_commits?`<div class="proj-meta-item">&#x1F4BE; <b>${p.total_commits}</b> commits</div>`:''}
+            ${p.active_days?`<div class="proj-meta-item">&#x1F4C5; <b>${p.active_days}</b> active days</div>`:''}
+            ${p.last_pushed?`<div class="proj-meta-item">&#x1F504; Last pushed: <b>${esc(p.last_pushed)}</b></div>`:''}
+            ${p.is_fork?`<div class="proj-meta-item">Fork detected</div>`:''}
+            ${p.candidate_is_author===true?`<div class="proj-meta-item">&#x270D; Commit author confirmed</div>`:''}
+          </div>
+        </div>`).join('')}
+    </div>` : ''}
+
+    ${Object.keys(cats).length ? `
+    <div class="modal-section">
+      <div class="modal-section-title">GitHub Profile Breakdown</div>
+      ${Object.entries(cats).map(([k,v])=>`
+        <div class="gh-cat-row">
+          <div class="gh-cat-name">${esc(k)}</div>
+          <div class="gh-cat-bar-wrap"><div class="gh-cat-bar" style="width:${v}%"></div></div>
+          <div class="gh-cat-val">${v}</div>
+        </div>`).join('')}
+    </div>` : ''}
+
+    ${c.explanation ? `
+    <div class="modal-section">
+      <div class="modal-section-title">Score Explanation</div>
+      <div class="explain-box">${esc(c.explanation)}</div>
+    </div>` : ''}
+  `;
+  document.getElementById('overlay').classList.add('open');
+}
+function closeModal(e) { if (e.target === document.getElementById('overlay')) closeM(); }
+function closeM() { document.getElementById('overlay').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeM(); });
+
+/* ── Quick Score ─────────────────────────────────────────────────────── */
+async function runQS() {
+  const jd = document.getElementById('qsJD').value.trim();
+  const resume = document.getElementById('qsFile').files[0];
+  if (!jd || !resume) { alert('Enter a Job Description and select a resume file.'); return; }
+  const btn = document.getElementById('qsBtn');
+  btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Scoring...';
+  const form = new FormData();
+  form.append('jd', jd); form.append('resume', resume);
+  try {
+    const r = await fetch(`${API}/api/quick-score`, { method: 'POST', body: form });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Server error');
+
+    const comp     = d.components || {};
+    const tier     = d.tier || '';
+    const rec      = d.recommendation || '';
+    const note     = d.tier_note || '';
+    const strengths  = d.strengths  || [];
+    const weaknesses = d.weaknesses || d.missing_skills || [];
+
+    // Component table rows (v2 key: resume_quality not resume_structure)
+    const compOrder = ['required_skill_match','project_evidence','semantic_match',
+                       'experience_relevance','keyword_coverage','resume_quality',
+                       'education','certifications'];
+    const compRows = compOrder.map(k => {
+      const c = comp[k]; if (!c) return '';
+      const pct = Math.min(100, c.score);
+      const barColor = c.score >= 70 ? 'var(--black)' : c.score >= 45 ? 'var(--gray-600)' : 'var(--gray-300)';
+      return `<tr>
+        <td style="font-size:11px;font-weight:600;color:var(--gray-800);padding:9px 12px;white-space:nowrap">${esc(c.label)}</td>
+        <td style="padding:9px 14px;width:200px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:4px;background:var(--gray-100);border-radius:0;overflow:hidden">
+              <div style="height:100%;background:${barColor};width:${pct}%;transition:width .5s ease"></div>
+            </div>
+            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--black);min-width:34px;text-align:right">${c.score.toFixed(1)}</span>
+          </div>
+        </td>
+        <td style="font-size:10px;font-family:var(--mono);color:var(--gray-400);padding:9px 10px;text-align:center;white-space:nowrap">${c.weight}%</td>
+        <td style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--black);padding:9px 12px;text-align:right">${c.contribution.toFixed(1)}</td>
+      </tr>`;
+    }).join('');
+
+    const penRow = (d.penalty && d.penalty < 0)
+      ? `<tr style="background:var(--gray-50)"><td colspan="3" style="font-size:10px;font-weight:600;padding:7px 12px;color:var(--gray-500);letter-spacing:.4px;text-transform:uppercase">Penalty</td><td style="font-family:var(--mono);font-size:11px;font-weight:700;padding:7px 12px;text-align:right;color:var(--gray-600)">${d.penalty.toFixed(1)}</td></tr>` : '';
+
+    // Star rating helper (◆ filled, ◇ empty)
+    const stars = (n) => '◆'.repeat(n) + '◇'.repeat(5-n);
+
+    // Strengths rows
+    const strengthRows = strengths.length
+      ? strengths.map(s => `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--gray-100)">
+          <span style="font-size:11px;font-weight:600;color:var(--gray-800)">${esc(s.skill)}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            ${s.projects>0?`<span style="font-size:9px;color:var(--gray-400);font-family:var(--mono)">${s.projects} project${s.projects>1?'s':''}</span>`:''}
+            <span style="font-family:var(--mono);font-size:12px;letter-spacing:2px;color:var(--black)">${stars(s.stars)}</span>
+          </div>
+        </div>`).join('')
+      : '<div style="font-size:11px;color:var(--gray-400);padding:8px 0">No strengths detected</div>';
+
+    document.getElementById('qsResult').innerHTML = `
+      <div class="result-card fade-up mt-12">
+
+        <!-- ── Confidence Header ────────────────────────────────── -->
+        <div style="display:grid;grid-template-columns:auto 1fr auto;gap:20px;align-items:start;margin-bottom:20px">
+          <div style="text-align:center">
+            <div class="big-score">${(d.ats_score||0).toFixed(1)}</div>
+            <div class="big-score-label">Overall ATS</div>
+          </div>
+          <div style="border-left:2px solid var(--gray-200);padding-left:20px">
+            <div style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gray-400);margin-bottom:4px">Hiring Confidence</div>
+            <div style="font-size:17px;font-weight:800;color:var(--black);line-height:1.1">${esc(tier)}</div>
+            <div style="font-size:10px;color:var(--gray-500);margin-top:4px">${esc(note)}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--gray-400);margin-bottom:6px">Recommendation</div>
+            <div style="display:inline-block;padding:5px 12px;border:1.5px solid var(--black);font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase">${esc(rec)}</div>
+            <div style="margin-top:8px;font-size:9px;color:var(--gray-400);font-family:var(--mono)">${esc(d.name||'')} · cosine ${d.raw_cosine!==undefined?d.raw_cosine.toFixed(4):''}</div>
+            ${d.email?`<div style="font-size:9px;color:var(--gray-400)">${esc(d.email)}</div>`:''}
+          </div>
+        </div>
+
+        <!-- ── 8-Component Breakdown ────────────────────────────── -->
+        <div style="margin-bottom:20px">
+          <div class="skills-label" style="margin-bottom:8px">Score Breakdown — 8 Evidence Components</div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid var(--gray-200)">
+            <thead><tr style="background:var(--gray-100)">
+              <th style="padding:7px 12px;font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--gray-500);text-align:left;border-bottom:1px solid var(--gray-200)">Component</th>
+              <th style="padding:7px 14px;font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--gray-500);border-bottom:1px solid var(--gray-200)">Score / 100</th>
+              <th style="padding:7px 10px;font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--gray-500);text-align:center;border-bottom:1px solid var(--gray-200)">Wt</th>
+              <th style="padding:7px 12px;font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--gray-500);text-align:right;border-bottom:1px solid var(--gray-200)">Pts</th>
+            </tr></thead>
+            <tbody>${compRows}${penRow}
+              <tr style="border-top:2px solid var(--black);background:var(--black)">
+                <td colspan="3" style="padding:10px 12px;font-size:10px;font-weight:700;color:var(--white);letter-spacing:.5px;text-transform:uppercase">Final ATS Score</td>
+                <td style="padding:10px 12px;font-family:var(--mono);font-size:18px;font-weight:900;color:var(--white);text-align:right">${(d.ats_score||0).toFixed(1)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── Strengths / Weaknesses ───────────────────────────── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div>
+            <div class="skills-label" style="margin-bottom:10px">Strengths</div>
+            <div style="font-size:9px;color:var(--gray-400);font-family:var(--mono);margin-bottom:8px;letter-spacing:.5px">◆◆◆◆◆ = skill proven in 4+ projects</div>
+            ${strengthRows}
+          </div>
+          <div>
+            <div class="skills-label" style="margin-bottom:10px">Missing Required Skills</div>
+            ${weaknesses.length
+              ? weaknesses.map(s => `<div style="padding:6px 0;border-bottom:1px solid var(--gray-100);display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--gray-300);font-family:var(--mono)">✕</span><span style="font-size:11px;color:var(--gray-700)">${esc(s)}</span></div>`).join('')
+              : '<div style="font-size:11px;color:var(--gray-500);padding:8px 0">✓ No critical gaps</div>'}
+          </div>
+        </div>
+
+        <!-- ── Analysis ─────────────────────────────────────────── -->
+        ${d.explanation?`<div><div class="skills-label" style="margin-bottom:6px">Analysis</div><div class="explain-box">${esc(d.explanation)}</div></div>`:''}
+      </div>`;
+
+  } catch(err) {
+    document.getElementById('qsResult').innerHTML = `<div style="padding:16px;border:1px solid var(--gray-200);background:var(--white);margin-top:12px;font-size:12px;color:var(--gray-700)"><strong>Error:</strong> ${esc(err.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Score Resume';
+  }
+}
+
+
+/* ── Reset DB ────────────────────────────────────────────────────────── */
+async function resetDB() {
+  if (!confirm('This will permanently delete all indexed students. Continue?')) return;
+  await fetch(`${API}/api/reset`, { method: 'DELETE' });
+  allResults = [];
+  document.getElementById('resWrap').innerHTML = '<div class="empty-state"><div class="empty-icon">&#x1F4CB;</div><div class="empty-title">No Results</div></div>';
+  document.getElementById('resBadge').style.display = 'none';
+  document.getElementById('distBar').style.display = 'none';
+  checkHealth();
+}
+
+/* ── Utils ───────────────────────────────────────────────────────────── */
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>
