@@ -1,0 +1,1760 @@
+================================================================================
+HIREFLOW-LITE — CODE-VERIFIED PROJECT DEEP DIVE
+================================================================================
+
+Repository: Gopisokk/hireflow
+Branch reviewed: main
+Tree snapshot reviewed: 76fc299f4715dea7bd22c0cca46d09215d8f3ab9
+Review date: 2026-08-18
+
+PURPOSE
+-------
+This document explains the CURRENT codebase, not only the README. It covers:
+- file-by-file responsibilities
+- which modules are actually active in the server path
+- complete ATS data flow
+- what is stored and how it is reused
+- scoring mathematics and examples
+- GitHub profile and project verification
+- edge cases, failure modes and security concerns
+- strengths and weaknesses
+- difficult HR/technical interview questions and strong answer points
+
+IMPORTANT CODEBASE NOTE
+-----------------------
+There are multiple generations of the project in this repository. The current
+web server uses server.py -> ingest.py -> qwen_resume_parser.py ->
+qwen_validator.py -> minilm.py/database.py and server.py -> search.py ->
+ats_engine.py -> optional github_verifier.py/project_verifier.py.
+
+hybrid_search.py, resume_parser.py and project_authenticator.py are alternative /
+legacy modules and are not part of the main server search path. The older
+PROJECT_DEEP_DIVE.txt also describes a 50/50 ATS/GitHub blend, but the current
+search.py implementation uses 65% ATS + 35% GitHub.
+
+================================================================================
+1. ONE-SENTENCE PROJECT EXPLANATION
+================================================================================
+
+HireFlow-Lite is a local-first recruitment screening system that converts
+PDF/DOCX resumes into structured candidate records, stores both lexical and
+semantic representations, retrieves candidates with BM25 + vector search,
+re-ranks them using an evidence-based ATS score, and optionally checks GitHub
+evidence before producing a 65/35 ATS/GitHub composite ranking.
+
+================================================================================
+2. BIG-PICTURE ARCHITECTURE
+================================================================================
+
+                        HR / Recruiter
+                              |
+                    Job Description (JD)
+                              |
+                              v
+                  +------------------------+
+                  |       FastAPI           |
+                  |       server.py         |
+                  +------------+------------+
+                               |
+               +---------------+----------------+
+               |                                |
+         Phase 1 Ingest                    Phase 2 Search
+               |                                |
+     CSV + ZIP resumes                   JD text / Top-K
+               |                                |
+               v                                v
+       document_extractor                MiniLM JD embedding
+               |                                |
+               v                       +--------+--------+
+       plain resume text               |                 |
+               |                     sqlite-vec       FTS5/BM25
+               v                       |                 |
+     Qwen 2.5 1.5B / Ollama            +--------+--------+
+               |                                |
+               v                                v
+        Canonical JSON                        RRF
+               |                                |
+               v                                v
+      Deterministic validator          Top-K shortlist
+               |                                |
+               v                                v
+        Flatten candidate               ats_engine.py
+               |                         8 ATS components
+               v                                |
+       +---------------+                       |
+       | SQLite        |<----------------------+ 
+       | students      |
+       | students_fts  |
+       | resume_vec    |
+       +---------------+                       |
+                                               |
+                                      Optional GitHub verification
+                                               |
+                                     +---------+---------+
+                                     |                   |
+                              github_verifier     project_verifier
+                                     |                   |
+                                     +---------+---------+
+                                               |
+                                    GitHub credibility score
+                                               |
+                                     ATS 65% + GH 35%
+                                               |
+                                               v
+                                      Final ranked list
+
+================================================================================
+3. FILE-BY-FILE CODE REVIEW
+================================================================================
+
+3.1 ROOT: .gitignore
+---------------------
+Purpose:
+- ignores virtual environments, caches, uploaded files, database files and
+  local artifacts.
+
+Important entries:
+- venv/, __pycache__/, *.pyc
+- github_cache/
+- uploads/
+- *.csv, *.zip
+- hireflow.db
+- models/, job_results/
+
+Why it matters:
+- resumes and CSV/ZIP uploads should not be committed
+- GitHub cache can contain profile information
+- the SQLite DB is local runtime state
+
+Review note:
+- server_run.log is present in the repository even though it is described as a
+  local log category. That log includes an absolute Windows filesystem path and
+  many health requests. It should normally be removed from source control and
+  added to .gitignore.
+
+3.2 ROOT: README.md
+--------------------
+Purpose:
+- setup and high-level architecture.
+- documents the three user workflows: ingest, JD search, quick score/GitHub.
+
+The README states:
+PDF/DOCX -> extraction -> 3.5k characters -> Qwen -> structured JSON ->
+validator -> MiniLM/SQLite/GitHub verifier.
+
+Interview use:
+- use the README to explain the product quickly;
+- use this document to explain what the code actually does.
+
+3.3 ROOT: PROJECT_DEEP_DIVE.txt
+--------------------------------
+Purpose:
+- earlier architecture/interview notes.
+
+Important discrepancy with current code:
+- old document describes a 50/50 ATS/GitHub blend;
+- current search.py computes 65% ATS + 35% GitHub.
+
+Do not quote the old 50/50 value in an interview.
+
+3.4 hireflow-lite/server.py
+----------------------------
+Role:
+- main FastAPI application and API orchestration layer.
+
+Important endpoints:
+POST /api/ingest
+- accepts CSV + resumes ZIP
+- saves uploads under uploads/<job_id>/
+- extracts the ZIP
+- starts background ingestion
+
+POST /api/search
+- accepts JD, top_k, GitHub verification flag and optional global token
+- runs search in a background thread
+
+POST /api/quick-score
+- one-resume scoring flow
+- PDF/DOCX -> Qwen -> ATS -> optional GitHub verification
+- no database write required for the single candidate path
+
+POST /api/github-verify
+- standalone GitHub verification
+
+GET /api/jobs/{id}/stream
+- Server-Sent Events progress stream
+
+GET /api/jobs/{id}/result
+- polling endpoint for a finished background job
+
+GET /api/students
+- lists indexed candidates
+
+GET /api/students/{roll_number}
+- returns a single candidate
+- explicitly removes raw_text and github_token before response
+
+GET /api/health
+- reports device/GPU, DB statistics and Ollama availability
+
+DELETE /api/reset
+- wipes and recreates the local DB
+
+Background execution:
+- JOBS and JOB_QUEUES are in-memory Python dictionaries/queues.
+- ingestion/search are executed with Python threads.
+
+Why this design was chosen:
+- Ollama is treated as a GPU-bound sequential workload.
+- background jobs prevent the HTTP request from blocking while inference runs.
+- SSE gives UI progress/heartbeat messages.
+
+Important limitations / production issues:
+1. Job state is in memory. A process restart loses it.
+2. Multiple server workers would not share the same JOBS dictionary.
+3. There is no authentication/authorization around the API.
+4. CORS is configured with allow_origins=["*"] and all methods/headers.
+5. /api/reset is destructive and has no authorization check.
+6. ZIP extraction uses ZipFile.extractall() without path traversal validation.
+7. Upload filenames are used in filesystem paths; filename sanitization should be
+   added before writing files.
+8. GitHub tokens can enter through form fields and CSV data.
+
+3.5 hireflow-lite/ingest.py
+---------------------------
+Role:
+- Phase 1 ingestion pipeline.
+
+Flow:
+1. Validate CSV and resume directory.
+2. Read CSV with utf-8-sig.
+3. Auto-detect columns with aliases for roll number, name, GitHub URL and token.
+4. Build an index of PDF/DOCX/DOC files.
+5. Match each candidate to a resume file using several strategies.
+6. Parse resumes sequentially through Qwen/Ollama.
+7. Batch-embed parsed profiles with MiniLM.
+8. Write structured data, FTS content and embeddings into SQLite.
+
+Resume matching strategies:
+- exact file stem == roll number
+- file stem starts with roll number
+- short file stem appears to be a prefix of roll number
+- first two name parts appear in the filename
+
+GPU strategy:
+- parsing is intentionally sequential because concurrent Ollama calls can
+  exhaust or deadlock limited VRAM.
+- embedding is batched afterward.
+
+Timeout strategy:
+- outer per-resume hard timeout: 95 seconds
+- Qwen/Ollama call timeout: 75 seconds
+- heartbeat every 8 seconds
+
+Fallback strategy:
+- if structured parsing fails, raw document text is saved and the candidate can
+  still receive an embedding.
+- however, skills/projects may become empty, which weakens later ATS scoring.
+
+Important data-loss point:
+The parsed JSON can contain certifications, achievements, competitive_programming
+and volunteering, but the ingest flattening code stores education, experience,
+skills, projects, contact fields and raw_text. Those additional structured fields
+are not persisted as dedicated DB columns.
+
+Also important:
+student["raw_text"] is rebuilt from education + experience + projects + skills.
+It is not necessarily the complete original resume text. Therefore an LLM parser
+omission can become a permanent omission in the searchable/scored representation.
+
+Bug/quality observation:
+The code increments parse_failed only when _status == "failed", while the normal
+LLM-failure fallback uses _status == "partial". So parse_failed can under-report
+real parsing failures.
+
+DOC mismatch:
+_file_index accepts .doc files, but document_extractor.py only implements PDF and
+DOCX. A .doc file can therefore be matched successfully and fail during parsing.
+
+3.6 hireflow-lite/document_extractor.py
+---------------------------------------
+Role:
+- low-level text extraction from PDF and DOCX.
+
+PDF path:
+- PyMuPDF / fitz
+- reads text blocks and spans
+- sorts blocks approximately top-to-bottom then left-to-right
+- converts bullets to hyphen text
+- creates line IDs, bounding boxes and page numbers
+
+DOCX path:
+- python-docx
+- reads paragraphs and table cells
+- creates line IDs
+- does not retain real page/bounding-box layout information
+
+What is deliberately discarded:
+- images
+- most visual formatting
+- font semantics in this lightweight extractor
+- layout as a first-class signal
+
+Critical edge case:
+Scanned/image-only PDF resumes have no selectable text. This extractor does not
+run OCR, so the resulting text can be empty and the candidate may fall back or
+fail.
+
+3.7 hireflow-lite/qwen_resume_parser.py
+----------------------------------------
+Role:
+- LLM-based semantic resume information extraction.
+
+Model:
+- default: qwen2.5:1.5b-instruct via local Ollama.
+
+Input controls:
+- MAX_CHARS = 3500 before the LLM call.
+- num_ctx = 4096
+- num_predict = 1536
+- temperature = 0.0
+- top_k = 1
+- top_p = 1.0
+
+Reason:
+- small local model is cheap/private and can run on limited hardware.
+- deterministic generation reduces variation.
+
+Prompt asks for:
+- candidate
+- education
+- experience
+- projects
+- skills
+- certifications
+- achievements
+- competitive programming
+- volunteering
+
+Validation flow:
+1. extract text once
+2. truncate to 3500 chars
+3. call Ollama
+4. parse JSON
+5. retry with a simpler JSON prompt if JSON decoding fails
+6. Pydantic validation
+7. deterministic evidence validation
+
+Timeout behavior:
+- Ollama is called inside a daemon thread and joined for 75 seconds.
+- on timeout, an empty canonical result is returned.
+
+Important edge case:
+The timed-out daemon thread is not force-killed. The Python thread can remain
+alive after the timeout. This is why concurrency must be handled carefully.
+
+Major quality limitation:
+The first 3500 characters are prioritized. If projects or certifications are
+late in a long resume, they may never reach the LLM.
+
+3.8 hireflow-lite/qwen_schema.py
+--------------------------------
+Role:
+- canonical Pydantic data model for parsed resumes.
+
+Models:
+Candidate:
+- name, email, phone, GitHub, LinkedIn
+
+Education:
+- institution, degree, field, CGPA, dates
+
+Experience:
+- organization, role, type, description, technologies, dates, source lines
+
+Project:
+- project_name, description, technologies, dates, URL, source lines, confidence
+
+Skills:
+- programming languages, frameworks, libraries, databases, cloud, tools, other
+
+CanonicalResume:
+- all of the above plus certifications, achievements, competitive programming,
+  volunteering
+
+Interview sentence:
+“Pydantic gives the LLM output a stable contract, then the validator checks the
+content against evidence instead of blindly trusting the model.”
+
+3.9 hireflow-lite/qwen_validator.py
+-----------------------------------
+Role:
+- deterministic post-LLM evidence validation. No LLM calls.
+
+Main checks:
+- reject obvious false project titles such as “Skills”, “Education”, “Certifications”
+- validate optional source line IDs
+- check whether project names are supported by source text
+- check whether descriptions are partially supported
+- assign High/Medium/Low project confidence
+- merge duplicate project names using SequenceMatcher
+- mark the whole result needs_review when validation errors or low-confidence
+  projects occur
+
+Example from the repository fixtures:
+- a HireFlow project was extracted with High confidence;
+- AgentNexus was marked Low confidence because its evidence alignment was weak;
+- the overall status became needs_review.
+
+Important implementation gaps:
+- validate_source_lines() is called, but the returned lines_valid value is not
+  used to reject or downgrade the project. Invalid source IDs therefore do not
+  actually change the result.
+- technology validation is effectively cosmetic: both branches append the
+  technology, whether or not it is supported by source text.
+- check_text_support() is mostly substring/word-overlap logic, not semantic proof.
+
+3.10 hireflow-lite/minilm.py
+----------------------------
+Role:
+- semantic embedding model wrapper.
+
+Model:
+- sentence-transformers/all-MiniLM-L6-v2
+- output dimension = 384
+
+Implementation:
+- pure Hugging Face AutoTokenizer + AutoModel
+- mean pooling using attention masks
+- L2 normalization
+- max_length = 512 tokens
+- batch processing
+
+Why 384 dimensions:
+- much smaller than large embedding models
+- inexpensive CPU inference
+- practical for local SQLite vector search
+
+Important runtime behavior:
+- local_files_only=True is tried first, then network download fallback.
+- a global singleton is cached by get_minilm_model(). If it was first created
+  on CPU, a later request for CUDA returns the same CPU model. Device selection
+  therefore effectively follows the first initialization.
+
+3.11 hireflow-lite/database.py
+------------------------------
+Role:
+- single source of truth for persistence.
+
+Main SQLite tables:
+
+students
+--------
+roll_number       primary key
+name
+github_url
+github_token
+email
+phone
+education
+skills           JSON array
+projects         JSON array
+raw_text
+resume_filename
+ingested_at
+ats_score
+github_score
+composite_score
+final_score
+matched_skills   JSON array
+missing_skills   JSON array
+github_details   JSON object
+project_verif    JSON array
+explanation
+stage
+
+students_fts
+------------
+- SQLite FTS5 virtual table
+- content contains candidate text for BM25 retrieval
+- tokenizer = porter ascii
+
+resume_embeddings
+-----------------
+- sqlite-vec virtual table
+- 384-dimensional MiniLM embedding
+
+jobs
+----
+- intended to cache JD runs/results
+- current search.py does not actively persist search results there, so it is
+  currently an underused/dead schema feature.
+
+SQLite runtime tuning:
+- WAL journal mode
+- synchronous=NORMAL
+- 64 MB page cache
+- temp_store=MEMORY
+
+Storage lifecycle:
+- ingestion upserts candidate JSON into students
+- FTS record is regenerated
+- old embedding is deleted and replaced
+- ATS score update stores matches/misses/explanation
+- GitHub update stores GitHub score, composite score, details and project proof
+
+Important security issue:
+github_token is stored directly in students as plaintext. In production, tokens
+should not be persisted this way.
+
+Important semantic point:
+ATS score, GitHub score and composite score are intentionally separate fields.
+This is good architecture because they answer different questions.
+
+3.12 hireflow-lite/search.py
+----------------------------
+Role:
+- CURRENT Phase 2 retrieval, ATS ranking and optional GitHub enrichment.
+
+Exact pipeline:
+1. open DB
+2. embed JD with MiniLM
+3. extract JD keywords
+4. over-retrieve top_k * 4 from vector search
+5. over-retrieve top_k * 4 from BM25
+6. merge with Reciprocal Rank Fusion
+7. take top_k shortlist
+8. run ats_engine.score_candidate for each shortlisted resume
+9. optionally GitHub-verify shortlisted candidates
+10. project-verify resume projects
+11. compute 65/35 composite
+12. sort final results
+13. remove raw_text and GitHub token from response payload
+
+Vector search:
+- sqlite-vec KNN
+- lower distance = better rank
+
+BM25:
+- FTS5
+- special characters removed before search
+- top 30 extracted JD keywords used by default retrieval call
+
+RRF formula:
+RRF(candidate) = sum over ranking lists of 1 / (60 + rank)
+
+RRF is useful because BM25 and vector distance are not directly comparable.
+RRF only needs their rank positions.
+
+GitHub eligibility in bulk search:
+- current bulk path requires a GitHub URL AND a token.
+- candidates with public GitHub but no token are skipped by this bulk search path.
+- quick-score has a different behavior and can use the unauthenticated REST path.
+
+This distinction is important in interviews:
+“The standalone verifier can work without a token, but the bulk search integration
+currently only sends token-backed candidates to the GitHub step.”
+
+3.13 hireflow-lite/ats_engine.py
+--------------------------------
+Role:
+- CURRENT ATS evidence aggregation/scoring engine.
+
+The eight components and weights are:
+
+1. Required Skill Match      35%
+2. Project Evidence           25%
+3. Semantic Alignment         10%
+4. Experience Relevance       10%
+5. Keyword Coverage            8%
+6. Resume Quality               5%
+7. Education                    4%
+8. Certifications              3%
+
+Penalty layer:
+- 0 to -15 points
+
+Final formula:
+ATS = sum(component_score * component_weight) + penalty
+then clamp to 0..100.
+
+3.13.1 Required Skill Match
+- extracts required/preferred JD terms
+- checks skills against resume text and a synonym map
+- if a required skill appears in project descriptions it gets additional evidence
+  multiplier: base 1.0 + 0.5 for every demonstrating project
+- preferred skills can add up to +15
+- very low required-skill coverage (<20%) is capped at 30
+
+Example:
+JD requires Python, FastAPI, PostgreSQL, Docker.
+Candidate mentions all four in skills, but only Python/FastAPI/Docker are demonstrated
+in projects. Those demonstrated skills receive stronger evidence weighting.
+
+3.13.2 Project Evidence
+- project descriptions are examined for required skills and JD terms
+- keyword evidence is primary
+- MiniLM semantic similarity is secondary
+- multiple strong projects receive a stacking bonus
+- no-project candidates start from a low project score
+
+3.13.3 Semantic Alignment
+- raw cosine similarity between resume and JD embeddings
+- transformed using a sigmoid
+- midpoint = 0.30, k = 15
+
+Approximate mapping from the code comments:
+0.28 -> 44
+0.36 -> 71
+0.50 -> 95
+
+This avoids treating a raw cosine score like a percentage.
+
+3.13.4 Experience Relevance
+- heuristically detects entry/mid/senior/lead language in the JD
+- detects broad domains such as web, systems, ML, DevOps, mobile, security and
+  blockchain
+- uses projects as additional evidence when experience wording is sparse
+
+3.13.5 Keyword Coverage
+- JD terms found in candidate text / all extracted terms
+- nonlinear sqrt-like mapping via coverage^0.55
+- this is BM25-inspired coverage, NOT the actual BM25 search score.
+
+3.13.6 Resume Quality
+Scores contact completeness, major sections, skill count, quantified metrics,
+word count and project count.
+
+3.13.7 Education
+- CS-related fields are favored over generic STEM, then other fields
+- degree level and some CGPA/school signals provide bonuses
+
+3.13.8 Certifications
+- regex-based detection for AWS/GCP/Azure/Kubernetes/open source/hackathon/etc.
+- starts from a base value before adding matches
+
+Penalty layer:
+- very low skill ratio
+- no projects/no project evidence
+- very short resume text
+- obvious keyword stuffing
+
+ATS tiers:
+95-100 Exceptional Match -> Strongly Recommend
+85-94  Strong Match      -> Recommend
+70-84  Good Match        -> Recommend with Notes
+55-69  Potential Match   -> Further Review
+40-54  Moderate Match    -> Hold for Review
+25-39  Weak Match        -> Not Recommended
+0-24   Poor Match        -> Do Not Proceed
+
+Important synonym-map caveat:
+The system intentionally treats related tools as evidence of canonical skills.
+For example, the Python map includes Django/Flask/FastAPI and the Java map includes
+Spring/Maven/Gradle. This increases recall but can create false positives.
+
+3.14 hireflow-lite/github_verifier.py
+--------------------------------------
+Role:
+- GitHub profile credibility and resume cross-reference engine.
+
+Fetch modes:
+A) Token-backed GraphQL
+- richer profile/repository data
+- higher rate limits
+
+B) No-token REST
+- profile
+- repositories
+- public events
+- roughly 3 requests for the basic fetch path
+
+Caching:
+- github_cache/<username>.json
+- 24-hour cache
+
+GraphQL data includes:
+- name, email, account creation date, bio, location, website
+- hireable flag
+- organizations
+- followers
+- contribution totals and calendar
+- pinned repositories
+- up to 30 most recently updated repositories
+- fork status
+- stars/forks
+- created/updated/pushed timestamps
+- primary language and language edges
+- repository topics
+- default-branch history count
+- README text
+
+Scoring architecture:
+5 weighted groups:
+
+Project Authenticity  40%
+Development History   25%
+Technical Evidence   20%
+Repository Quality   10%
+Social Context        5%
+
+The source file comments say “40 factors”, but the current FACTOR_REGISTRY contains
+39 registered scoring factors. In an interview, use “39 registered factors in the
+current code” rather than quoting the stale comment.
+
+Factor families include:
+- account age/profile completeness
+- hireable flag and organization presence
+- public email match
+- contribution days/commits/streaks/consistency
+- fork ratio/original repositories
+- commit authorship
+- README/tests/CI/CD/topics
+- language match/depth/diversity
+- project existence/fuzzy match/README alignment
+- technology in GitHub vs resume
+- stars/forks/open-source contributions/pinned repository quality
+
+Major design philosophy:
+GitHub is not the same question as ATS.
+ATS asks: “Does the resume match the JD?”
+GitHub asks: “Is there technical evidence behind the resume?”
+
+3.15 hireflow-lite/project_verifier.py
+--------------------------------------
+Role:
+- verifies resume-claimed projects against GitHub repositories.
+
+Process for each resume project:
+1. build project text = name + description
+2. build repo text = repo name + description + first ~500 chars of README
+3. embed all project and repo texts with MiniLM
+4. compute project-vs-repository similarity matrix
+5. choose best repository for each project
+6. optionally fetch commit activity
+7. calculate name fuzzy similarity
+8. compare resume technologies with repository languages
+9. compare README with claimed description
+10. evaluate fork/authorship/timeline/commit depth/upload risk
+11. produce verified / uncertain / unverified result
+
+Per-project authenticity signals include:
+- repository match
+- ownership/fork status
+- candidate authorship ratio
+- active days
+- total commits
+- development span
+- technology evidence
+- README alignment
+- upload-risk flags
+
+Current status rules:
+- similarity < 0.20 -> unverified
+- project score >= 55 and similarity >= 0.35 -> verified
+- project score >= 30 -> uncertain
+- otherwise unverified
+
+Important caveats:
+- best-repository matching is not one-to-one. Multiple resume projects can map to
+  the same GitHub repo.
+- no-token verification has less commit-history evidence.
+- repo activity is based on the default branch.
+
+3.16 hireflow-lite/project_authenticator.py
+--------------------------------------------
+Role:
+- modular “Option B” authenticity engine.
+
+Components:
+- HistoryAnalyzer
+- AuthorshipAnalyzer
+- CodeTechnologyAnalyzer
+- ProjectAuthenticityEngine
+
+It computes a weighted authenticity score using commit activity, fork status,
+authorship ratio and technology evidence.
+
+Current integration status:
+- this module is not imported by the main search.py path.
+- project_verifier.py is the active project verification implementation.
+
+Therefore describe this module as an alternative/advanced verifier implementation,
+not as the current server execution path.
+
+3.17 hireflow-lite/hybrid_search.py
+------------------------------------
+Role:
+- alternate/legacy hybrid search design.
+
+It adds:
+- optional HyRE (Hypothetical Resume Expansion) using GPT-4o-mini
+- e5-base-v2 768-dimensional embeddings
+- BM25 + vector search + RRF
+
+Important:
+- it expects a different DB schema (candidates_fts/candidates_vec/candidates_raw)
+- current search.py does not import it
+- it introduces OpenAI dependency and is not the current local-first server path
+
+Use it in an interview as historical experimentation, not the active path.
+
+3.18 hireflow-lite/resume_parser.py
+-----------------------------------
+Role:
+- older layout-aware/block-classified parser.
+
+Capabilities include:
+- PyMuPDF/DOCX extraction
+- font size/bold/italic/bounding box features
+- block IDs
+- column handling heuristics
+- heading/section classification
+- project assembly and evidence mapping
+
+Current integration status:
+- current server/ingest uses qwen_resume_parser.py instead.
+- tests/benchmark_regression.py still imports this older parser.
+
+Repository benchmark output demonstrates real weaknesses in this legacy parser:
+- some resumes were extracted as 0 projects
+- some produced many false “projects” from section fragments or unrelated lines
+- one benchmark produced 17 extracted projects from a single resume
+
+This is an excellent interview answer:
+“We have an older deterministic layout parser retained for regression experiments,
+but the current ingestion path moved to local Qwen + deterministic evidence validation.”
+
+3.19 hireflow-lite/parse_single_resume.py
+-----------------------------------------
+Role:
+- CLI utility for converting one PDF/DOCX into canonical JSON.
+
+Flow:
+- accepts resume path + optional output path/model
+- calls qwen_resume_parser.parse_resume()
+- writes <resume>_parsed.json by default
+- prints status/project count/latency
+
+Useful for debugging the extraction layer independently of the full ATS.
+
+3.20 hireflow-lite/requirements.txt
+-----------------------------------
+Contains runtime dependencies for:
+- Torch / sentence transformers / spaCy
+- PyMuPDF / python-docx
+- sqlite-vec
+- FastAPI/Uvicorn/multipart
+- httpx
+- numpy/nltk/dotenv
+- Ollama/Pydantic
+- optional OpenAI
+
+Observation:
+Some packages support legacy or alternate paths. The current core pipeline can be
+understood without treating every dependency as part of every request.
+
+3.21 hireflow-lite/ui/index.html
+--------------------------------
+Role:
+- single-page frontend for the FastAPI service.
+
+It provides the browser-facing workflow around:
+- ingestion
+- search/ranking
+- quick score/GitHub verification
+- health/progress information
+
+The backend serves this file at / and also mounts /ui.
+
+3.22 hireflow-lite/server_run.log
+---------------------------------
+Role:
+- local development/server log.
+
+This should generally not be a committed source artifact because it includes:
+- absolute Windows filesystem paths
+- request history
+- environment-dependent details
+
+3.23 hireflow-lite/tests/benchmark_regression.py
+------------------------------------------------
+Role:
+- regression benchmark for the legacy resume_parser.py.
+
+Important issue:
+- it contains a hard-coded Windows path from one developer machine.
+- not portable without editing.
+- tests the older parser, not the primary current Qwen pipeline.
+
+3.24 tests/qwen_results/*.json
+------------------------------
+Role:
+- saved examples/snapshots of Qwen parsing output.
+
+These are useful for:
+- inspecting parser quality
+- checking schema behavior
+- regression comparison
+
+They are test data, not production logic.
+
+One sampled current fixture shows:
+- structured candidate fields
+- projects with source lines
+- High/Low confidence
+- needs_review status
+- parser metadata
+
+3.25 tests/regression/*.json
+----------------------------
+Role:
+- saved legacy parser regression output.
+
+These snapshots demonstrate how parser behavior changes across resume formats.
+They should be treated as fixtures, not authoritative “ground truth” unless manually
+verified.
+
+3.26 tests/regression/benchmark*.txt
+------------------------------------
+Role:
+- textual benchmark summaries.
+
+The sampled benchmark shows false-positive project extraction in the legacy parser,
+which is useful evidence for why the architecture evolved.
+
+================================================================================
+4. COMPLETE ATS DATA FLOW — STEP BY STEP
+================================================================================
+
+A. INGESTION
+-----------
+Step 1: HR uploads CSV + ZIP.
+
+CSV contains candidate-level metadata:
+roll_number, name, GitHub URL and optional GitHub token.
+
+ZIP contains PDF/DOCX resumes.
+
+Step 2: server.py writes uploads under a generated job directory.
+
+Step 3: ingest.py reads CSV and normalizes column names using aliases.
+
+Step 4: ingest.py resolves each candidate to one resume file.
+
+Example:
+CSV roll = 23AD044
+file = “23AD044 - Gopi.docx”
+=> startswith match => same candidate.
+
+Step 5: document_extractor.py extracts text.
+
+Raw PDF example:
+“Projects
+HireFlow — AI recruitment platform
+Python, FastAPI, BM25...”
+
+Step 6: qwen_resume_parser.py truncates to max 3500 characters and asks Qwen
+for canonical JSON.
+
+Conceptual output:
+{
+  candidate: {...},
+  education: [...],
+  experience: [...],
+  projects: [...],
+  skills: {...}
+}
+
+Step 7: qwen_validator.py checks whether extracted projects appear supported by
+source text and assigns confidence.
+
+Step 8: ingest.py flattens the JSON into the students schema.
+
+Step 9: MiniLM builds a 384-dimensional embedding from candidate text.
+
+Step 10: database.py stores:
+- candidate metadata
+- JSON skills/projects
+- raw_text
+- FTS search text
+- dense vector
+
+At this point the candidate is searchable.
+
+B. JD SEARCH
+------------
+Step 1: HR pastes JD.
+
+Example JD:
+“Backend Python Developer. Required: Python, FastAPI, PostgreSQL, Docker.
+Preferred: AWS, Redis. Experience with REST APIs and testing.”
+
+Step 2: MiniLM converts JD to a 384-dimensional vector.
+
+Step 3: ats_engine.extract_jd_keywords() extracts required/preferred/all terms.
+
+Potential required list:
+Python, FastAPI, PostgreSQL, Docker, REST APIs, testing
+
+Potential preferred list:
+AWS, Redis
+
+Step 4: vector retrieval searches resume_embeddings.
+This finds semantic matches such as:
+“built backend services with Flask”
+near a Python backend JD even if exact wording differs.
+
+Step 5: FTS5/BM25 searches exact lexical content.
+This catches:
+“FastAPI”, “PostgreSQL”, “Docker”.
+
+Step 6: RRF fuses the two ranked lists.
+
+Why both are needed:
+- BM25 = exact vocabulary and strong precision for named technologies.
+- vectors = paraphrase/semantic recall.
+
+Step 7: only the RRF shortlist is sent to the expensive ATS scoring stage.
+This is a classic retrieve-then-rerank architecture.
+
+C. ATS RERANKING
+-----------------
+For each shortlisted candidate:
+1. parse stored skills/projects JSON
+2. score required skills
+3. score project evidence
+4. compute resume-JD semantic similarity
+5. score experience relevance
+6. score keyword coverage
+7. score resume quality
+8. score education
+9. score certifications
+10. apply penalty
+11. save ATS result to DB
+
+D. GITHUB ENRICHMENT
+--------------------
+If bulk GitHub verification is enabled AND a token is available:
+1. identify username from URL
+2. fetch/cached profile
+3. score GitHub evidence
+4. verify resume project matches
+5. save GitHub score/details/project verification
+
+E. FINAL RANK
+-------------
+Without GitHub:
+final rank uses ATS score.
+
+With GitHub:
+composite = 0.65 * ATS + 0.35 * GitHub
+
+Example:
+Candidate A: ATS 88, GitHub 72
+Composite = 0.65*88 + 0.35*72 = 82.4
+
+Candidate B: ATS 79, GitHub 95
+Composite = 0.65*79 + 0.35*95 = 84.6
+
+B ranks above A because stronger credibility offsets somewhat weaker resume-JD fit.
+
+This is the fundamental product idea:
+FIT + EVIDENCE.
+
+================================================================================
+5. WHAT IS ACTUALLY STORED AND WHY
+================================================================================
+
+Field                    Where                     Used for
+--------------------------------------------------------------------------------
+roll_number              students                 identity / lookup
+name                     students                 UI / retrieval
+email                    students                 quality / GitHub cross-check
+phone                    students                 resume quality
+education                students                 education component
+skills                   students JSON            skill match / project evidence
+projects                 students JSON            project evidence / GitHub proof
+raw_text                 students                 ATS text / keyword / embedding
+resume_filename          students                 traceability
+ats_score                students                 JD fit
+matched_skills           students                 explanation/UI
+missing_skills           students                 explanation/UI
+github_score             students                 credibility
+github_details           students JSON            GitHub explanation
+a project_verif          students JSON            claimed-project proof
+composite_score          students                 65/35 ranking
+final_score              students                 display/ranking
+stage                    students                 pipeline state
+FTS content              students_fts             lexical retrieval
+384-d embedding          resume_embeddings        semantic retrieval
+GitHub profile cache     github_cache/*.json      lower API usage / faster checks
+
+Security-sensitive fields:
+- github_token
+- raw resume information
+- GitHub cache/profile data
+
+These need production-grade secrets and data-governance controls.
+
+================================================================================
+6. EXAMPLE ATS CASES
+================================================================================
+
+CASE 1 — Strong exact match
+--------------------------------
+JD:
+Python + FastAPI + PostgreSQL + Docker
+
+Resume:
+- Python, FastAPI, PostgreSQL, Docker
+- project explicitly uses FastAPI + PostgreSQL
+- experience includes REST APIs
+
+Expected behavior:
+- high BM25 rank
+- high vector similarity
+- strong required skill score
+- high project evidence because skills are demonstrated in a project
+- low/no penalty
+
+Expected result:
+Strong/Exceptional tier depending on the rest of the resume.
+
+CASE 2 — Semantic match but vocabulary differs
+-----------------------------------------------
+JD:
+“Python microservices developer”
+
+Resume:
+“Built Flask APIs, asynchronous service workers and containerized backend
+components.”
+
+BM25 may miss some exact terms.
+MiniLM can still recognize the semantic relationship.
+
+This is why hybrid retrieval improves recall.
+
+CASE 3 — Keyword stuffing
+--------------------------
+Resume contains:
+“Python Python Python Docker Docker AWS AWS ...”
+with few projects and little evidence.
+
+The ATS penalty layer detects repeated terms and low evidence.
+The score should remain below a strong candidate with real projects.
+
+CASE 4 — Missing critical skill
+-------------------------------
+JD requires Rust + Tokio + systems programming.
+Resume has Python, FastAPI and SQL only.
+
+Required-skill ratio is low.
+The engine can cap the skill component and apply a penalty.
+This should push the candidate toward lower tiers even if the resume is long.
+
+CASE 5 — Project proves the skill
+---------------------------------
+JD requires Rust.
+Resume skills says “Rust”.
+Project says “Rust + Tokio + async runtime”.
+
+The project evidence multiplier increases confidence because the skill is not merely
+listed; it is demonstrated in a project context.
+
+CASE 6 — Long resume truncation
+--------------------------------
+Resume first 3500 characters contain education and experience.
+The most important project appears on page 2 after the cutoff.
+
+Qwen may never see that project.
+The result can be incomplete.
+
+This is a known product limitation and a strong interview question.
+
+================================================================================
+7. GITHUB VERIFICATION — DETAILED EXAMPLE
+================================================================================
+
+Resume claims:
+“HireFlow — AI-powered ATS using Python, FastAPI, MiniLM, BM25.”
+
+GitHub profile contains:
+repo name = hireflow
+primary language = Python
+README = ATS/resume/GitHub verification content
+repo is not a fork
+many commits
+candidate username appears in commit authors
+multiple active days
+
+Project verifier:
+- project text embedding resembles repo text
+- name fuzzy match is high
+- language evidence matches
+- README alignment is high
+- commit history supports genuine development
+
+Result:
+Project may become verified/high confidence.
+
+Fraud-ish example:
+Resume claims “Large AI project” but GitHub repo is a one-commit fork with
+little candidate-authored history and unrelated README.
+
+Project verifier can identify:
+- fork status
+- low author ratio
+- low similarity
+- weak technology evidence
+- upload-risk flags
+
+Result:
+unverified or uncertain, not automatically “fraud”.
+
+That wording is important. Repository signals are evidence, not legal proof of fraud.
+
+================================================================================
+8. GITHUB EDGE CASES
+================================================================================
+
+1. Private repositories
+-----------------------
+A candidate may genuinely work mainly in private repos. Public GitHub evidence will
+underrepresent them.
+
+Correct product policy:
+GitHub score should be supplementary, not a hard rejection criterion.
+
+2. No GitHub account
+--------------------
+ATS can still score the resume.
+GitHub score is simply unavailable.
+
+3. GitHub username changed
+--------------------------
+Cached username-based data can become stale. A future implementation should resolve
+identity more carefully and invalidate cache when credentials/profile change.
+
+4. Repository renamed
+---------------------
+Name matching becomes weaker, but semantic description/README matching can still help.
+
+5. Project is in an organization
+---------------------------------
+The candidate may contribute to a team repository instead of owning it. Ownership-based
+heuristics must not equate “not owner” with “not contributor”.
+
+6. Forked repository with substantial work
+-------------------------------------------
+A fork is not automatically bad. The current verifier explicitly allows a higher score
+when the candidate contributes a substantial fraction of commits.
+
+7. Only default branch inspected
+--------------------------------
+Feature branches and merged history outside the sampled history can be missed.
+
+8. Commit history limited to 100 nodes
+--------------------------------------
+fetch_repo_commit_activity() requests the latest 100 default-branch commits. The reported
+total_commits comes from GitHub totalCount, but active days/authorship/timeline are derived
+from the sampled nodes. Therefore a very old project with more than 100 commits can have
+biased activity statistics.
+
+9. Multiple resume projects map to one repository
+--------------------------------------------------
+Current best-match logic does not enforce one-to-one matching. Two claimed projects can
+both select the same repo.
+
+10. No-token REST vs token-backed GraphQL
+-----------------------------------------
+The data richness differs. Token-backed checks can have richer languages/topics/README/
+history than the REST fallback adapter. This can make scores less comparable.
+
+11. 24-hour GitHub cache
+------------------------
+A changed repository/profile may not be re-read for up to 24 hours.
+The cache key is username-based, so changing token scopes alone does not force refresh.
+
+12. Stars/forks/social signals
+------------------------------
+Good projects can have zero stars. Social proof is deliberately only 5% of the current
+weighted GitHub score, but even small signals should be interpreted carefully for juniors.
+
+================================================================================
+9. ATS EDGE CASES
+================================================================================
+
+1. Scanned PDF -> no OCR -> little/no text.
+2. Two-column resume -> reading order may be imperfect.
+3. DOCX tables -> extracted, but page/layout semantics are lost.
+4. Long resume -> first 3500 characters dominate Qwen extraction.
+5. Duplicate names -> filename matching can produce wrong candidate assignment.
+6. Duplicate roll number -> students primary key means later ingestion replaces earlier row.
+7. Same skill with unrelated words -> synonym map can create false positives.
+8. Negation -> “I do not use Python” can still contain “Python” and produce keyword evidence.
+9. Skill in a certification only -> may be stored inconsistently because some parsed
+   sections are not persisted separately.
+10. Missing project -> project component and penalty reduce score.
+11. Parser failure -> candidate can still receive an embedding from raw text, but
+    structured skill/project evidence can be empty.
+12. Search with no DB -> error “Database is empty. Run ingestion first.”
+13. Search with malformed JD -> keyword extraction can produce noisy terms.
+14. Very short JD -> almost every candidate may have weak differentiation.
+15. Keyword stuffing -> penalty exists but is heuristic.
+16. Long project descriptions -> MiniLM itself truncates each embedding input to 512 tokens.
+17. Empty GitHub profile -> GitHub score can be low without meaning technical weakness.
+
+================================================================================
+10. SECURITY / PRIVACY RISKS TO MENTION IN AN INTERVIEW
+================================================================================
+
+Current repo issues:
+- GitHub tokens are stored in plaintext in SQLite.
+- CORS is wildcard.
+- no authentication/authorization on API endpoints.
+- destructive reset endpoint is exposed.
+- ZIP extraction is not hardened against path traversal.
+- upload filenames are not fully sanitized.
+- local GitHub cache stores profile data as plaintext JSON.
+- server log contains machine-specific filesystem information.
+
+Production fixes:
+1. never persist raw PATs in candidate DB records;
+2. use a secrets manager or encrypted secret store;
+3. encrypt sensitive data at rest;
+4. apply authentication + RBAC;
+5. restrict CORS to trusted origins;
+6. validate ZIP members before extraction;
+7. isolate uploads in a sandbox;
+8. add audit logs and access controls;
+9. define retention/deletion policies;
+10. separate candidate PII from ranking indexes where possible.
+
+================================================================================
+11. PROS
+================================================================================
+
+1. Local-first inference
+- Qwen through Ollama can keep resume text local.
+
+2. Low infrastructure cost
+- SQLite + sqlite-vec is lightweight for a student/project-sized deployment.
+
+3. Hybrid retrieval
+- BM25 catches exact skills while MiniLM catches semantic similarity.
+
+4. Retrieve-then-rerank architecture
+- expensive ATS/GitHub analysis is applied to a shortlist, not every candidate.
+
+5. Evidence-aware scoring
+- project usage can strengthen skill evidence.
+
+6. Explainability
+- component scores, matched/missing skills and GitHub factor scores are retained.
+
+7. Graceful degradation
+- raw-text embedding fallback can keep a candidate searchable after LLM failure.
+
+8. Modular structure
+- server, ingestion, extraction, parsing, scoring, DB and verification are separated.
+
+9. GitHub project evidence
+- stronger than merely checking whether a username exists.
+
+================================================================================
+12. CONS / LIMITATIONS
+================================================================================
+
+1. Small local model is less capable than a larger cloud model on very complex resumes.
+2. 3500-character parser cutoff can lose late sections.
+3. No OCR for scanned resumes.
+4. Some validation checks are incomplete or cosmetic.
+5. No-token vs token GitHub data richness can differ.
+6. Commit-history analysis is based on a 100-node sample.
+7. GitHub heuristics can encode bias (weekend activity, hireable flag, stars).
+8. Education scoring is heuristic and may be inappropriate for some jobs.
+9. Certification scoring is regex-based, not credential-verified.
+10. Bulk GitHub verification currently requires tokens.
+11. In-memory job manager does not scale horizontally.
+12. SQLite is not the right choice for very high write concurrency.
+13. Current tests partially exercise older architecture.
+14. Several modules duplicate concepts and create maintenance complexity.
+15. No calibrated ranking validation against a labeled hiring dataset is shown in code.
+16. No fairness audit, adverse-impact analysis or human-in-the-loop governance is built in.
+
+================================================================================
+13. WHY SQLITE + SQLITE-VEC?
+================================================================================
+
+For the current project scale, SQLite is attractive because:
+- one local file
+- no database server
+- relational + JSON fields together
+- FTS5 is built for lexical search
+- sqlite-vec adds vector KNN without another service
+- simple backup and deployment
+
+When to migrate:
+- many concurrent writers
+- tens/hundreds of thousands of new records per hour
+- multi-region/HA
+- multiple application replicas
+- strong transaction/audit requirements
+
+A likely production direction:
+PostgreSQL + pgvector + a queue-based ingestion service + object storage.
+
+================================================================================
+14. WHY BM25 + VECTORS + RRF?
+================================================================================
+
+Keyword-only problem:
+JD says “PostgreSQL”; resume says “Postgres” or “relational database”. Exact token
+matching can miss meaningful candidates.
+
+Vector-only problem:
+Semantic similarity can blur precise technical requirements and does not reliably
+capture exact product/version names or negation.
+
+RRF solution:
+- keep independent ranking lists
+- use rank rather than incomparable raw scores
+- candidates appearing high in both lists receive the strongest fusion score
+
+This is a classic hybrid information-retrieval pattern and is one of the strongest
+architecture choices in HireFlow.
+
+================================================================================
+15. WHY NOT LET THE MODEL MAKE THE FINAL HIRING DECISION?
+================================================================================
+
+Good answer:
+“The model is a retrieval and evidence-assistance component, not the sole hiring
+authority. HireFlow should rank candidates and expose evidence so a human recruiter
+can review the reasons. Automatic rejection based solely on a model score is risky,
+especially in employment decisions, because model errors and data availability can
+create unfair outcomes.”
+
+Do not use protected or sensitive attributes in scoring.
+Do not treat GitHub absence as proof of low ability.
+Do not treat social metrics as direct measures of employability.
+
+================================================================================
+16. DIFFICULT HR / TECHNICAL INTERVIEW QUESTIONS AND ANSWER POINTS
+================================================================================
+
+Q1. Explain HireFlow in 60 seconds.
+Answer points:
+- ingest PDF/DOCX resumes
+- Qwen extracts structured data locally
+- deterministic validator checks evidence
+- store JSON + FTS + vectors in SQLite
+- JD retrieval uses BM25 + MiniLM + RRF
+- ATS reranks shortlist
+- GitHub adds credibility evidence
+- final composite = 65% ATS + 35% GitHub
+
+Q2. Why not use a traditional keyword ATS?
+Answer points:
+- keyword systems miss paraphrases
+- resume vocabulary varies
+- vector search captures semantics
+- BM25 still preserves exact skill signals
+- hybrid retrieval gives better recall/precision balance
+
+Q3. Why not use only vector search?
+Answer points:
+- exact tech names matter
+- semantic similarity can produce false positives
+- BM25 is strong for precise lexical requirements
+- structured skill matching adds another evidence layer
+
+Q4. Why RRF instead of averaging vector and BM25 scores?
+Answer points:
+- raw vector distance and BM25 score are not naturally calibrated
+- RRF operates on ranking positions
+- robust and simple to combine heterogeneous retrieval systems
+
+Q5. Why use a 1.5B model?
+Answer points:
+- local deployment and limited VRAM
+- privacy
+- latency/cost
+- structured extraction is narrower than open-ended generation
+- tradeoff is lower reasoning/extraction quality on difficult documents
+
+Q6. What happens if Qwen hallucinates a project?
+Answer points:
+- Pydantic constrains shape
+- validator checks project text against source evidence
+- low-confidence projects mark needs_review
+- production improvement: stronger evidence spans + deterministic field validators
+
+Q7. What happens if the resume is 10 pages?
+Answer points:
+- parser currently caps input at 3500 characters
+- later sections can be lost
+- production fix: section-aware chunking + hierarchical extraction + merge phase
+
+Q8. Why is MiniLM 384-dimensional?
+Answer points:
+- fast CPU embedding
+- small storage footprint
+- sufficient semantic signal for project scale
+- 384 dimensions times candidate count is manageable inside SQLite
+
+Q9. How is the ATS score calculated?
+Answer points:
+- 35 required skill
+- 25 project evidence
+- 10 semantic
+- 10 experience
+- 8 keyword coverage
+- 5 resume quality
+- 4 education
+- 3 certifications
+- minus a penalty layer
+
+Q10. Why are skills in projects worth more than skills in a skills list?
+Answer points:
+- listing a skill is a weak claim
+- demonstrating it in project context is stronger evidence
+- evidence multiplier increases confidence without completely ignoring skill-list mentions
+
+Q11. Why is GitHub only 35%?
+Answer points:
+- GitHub measures technical evidence, not complete candidate-job fit
+- not every good engineer has public GitHub activity
+- private-company work cannot be fully observed
+- ATS should remain the dominant ranking signal
+
+Q12. What if someone has no GitHub?
+Answer points:
+- do not reject
+- leave GitHub score missing
+- rank by ATS / clearly communicate evidence availability
+
+Q13. What if the project is forked?
+Answer points:
+- fork != fraud
+- measure candidate-authored commits, ratio and post-fork work
+- downgrade when evidence is minimal, but keep human review
+
+Q14. What if the candidate's project repository has a different name?
+Answer points:
+- project verifier uses semantic text, README and fuzzy name evidence
+- therefore “E-Commerce App” can match a repo named “shop-backend” if content aligns
+
+Q15. What if two resume projects both match one repository?
+Answer points:
+- current implementation permits this
+- production fix: one-to-one assignment or joint optimization to avoid double-counting
+
+Q16. How do you detect copied projects?
+Answer points:
+- fork status
+- candidate author login presence
+- candidate commit ratio
+- commit chronology
+- technology evidence
+- README alignment
+- upload-risk flags
+- no single signal is treated as proof
+
+Q17. What is the biggest scalability bottleneck?
+Answer:
+“Ollama parsing is the first bottleneck because the current design deliberately
+serializes inference. At scale I would decouple parsing into a queue and GPU worker
+pool, then move vector/search persistence to a multi-writer database.”
+
+Q18. How would you scale to 100,000 resumes/day?
+Answer points:
+- object storage for raw files
+- queue (Kafka/RabbitMQ/SQS)
+- multiple inference workers
+- chunk/section-aware parser
+- PostgreSQL + pgvector or dedicated vector store
+- async GitHub enrichment workers
+- cache and batch APIs
+- observability + retry/dead-letter queue
+
+Q19. What is the current biggest security flaw?
+Answer:
+“Persisting GitHub tokens in plaintext in the students table, combined with an
+unauthenticated API and wildcard CORS. I would remove token persistence and put the
+API behind authentication/RBAC immediately.”
+
+Q20. What is the zip-slip problem?
+Answer:
+“extractall() can be dangerous when archive members contain parent-directory paths.
+I would validate each member path and ensure the final path remains under the job's
+sandbox directory before extraction.”
+
+Q21. Why not use Pinecone/Milvus?
+Answer points:
+- local zero-infrastructure deployment
+- privacy
+- low operating cost
+- SQLite is enough for project scale
+- migrate when concurrency/scale requires it
+
+Q22. How do you evaluate whether ranking is actually good?
+Answer points:
+- create labeled recruiter judgments
+- measure Precision@K, Recall@K, NDCG@K, MRR
+- evaluate ATS-only vs hybrid vs GitHub-enriched ranking
+- analyze false negatives/positives
+- conduct fairness/adverse-impact checks
+- recalibrate weights from evidence rather than intuition
+
+Q23. What would you change first in ATS scoring?
+Answer points:
+- make JD parsing more deterministic
+- add explicit negation handling
+- replace regex education/cert heuristics with job-specific evidence
+- use section-aware evidence spans
+- calibrate score with labeled outcomes
+
+Q24. How would you handle private GitHub work?
+Answer points:
+- do not penalize automatically
+- label evidence unavailable
+- allow candidate-provided verified evidence where policy permits
+- keep GitHub weight low enough that missing public evidence is not a rejection
+
+Q25. What bias concerns do you see?
+Answer points:
+- weekend activity should not imply better engineer
+- stars/forks correlate with popularity, not necessarily ability
+- education heuristics can privilege institutions/fields
+- certifications can privilege candidates who can afford them
+- public GitHub availability varies by employer and privacy policy
+- ranking should be audited and human-reviewed
+
+Q26. Why are there legacy modules in the repo?
+Answer:
+“The project evolved through multiple iterations. We retained older parsers and
+hybrid-search experiments for comparison/regression, but the live FastAPI path uses
+the newer Qwen + deterministic validator + MiniLM + FTS5/vec pipeline.”
+
+Q27. How do you know the GitHub account belongs to the candidate?
+Answer points:
+- current system mostly assumes the submitted URL is correct
+- public email match is only a weak cross-check
+- stronger production identity binding would be OAuth verification or candidate-auth
+  ownership proof
+
+Q28. What if a candidate has excellent skills but poor GitHub activity?
+Answer:
+“ATS and GitHub are independent. A weak GitHub signal should reduce credibility
+somewhat, not erase resume/job fit. The recruiter should inspect the evidence.”
+
+Q29. Would you automatically reject everyone below 55?
+Answer:
+“No. The tier is a ranking aid, not a policy engine. The system should support
+human review, job-specific thresholds and evidence inspection.”
+
+Q30. What is the single most important improvement for a production version?
+Answer points:
+- evidence-grounded parsing with section-aware chunking
+- secure token handling
+- labeled ranking evaluation
+- fairness monitoring
+- scalable async architecture
+- human-in-the-loop decisions
+
+================================================================================
+17. STRONG “DESIGN DEFENSE” ANSWER
+================================================================================
+
+If HR asks: “Why is your architecture good?”
+
+A strong answer:
+
+“I separated the problem into retrieval, evidence extraction, scoring and external
+verification rather than asking one model to make a hiring decision. Resume text is
+first converted into structured data locally using Qwen, then a deterministic
+validator checks whether important extracted project claims have source evidence.
+For candidate retrieval I use both BM25 and MiniLM embeddings, because exact
+technical terms and semantic similarity solve different problems. I fuse their
+rankings with RRF, then apply a weighted ATS model where required skills and project
+evidence dominate. Only after shortlist creation do I call the expensive GitHub
+verification layer. GitHub measures credibility signals separately, and the final
+65/35 composite keeps job fit more important than public-code activity. That makes
+the system modular, explainable and much easier to improve than a single opaque
+LLM score.”
+
+================================================================================
+18. WHAT I WOULD FIX NEXT — PRIORITY ORDER
+================================================================================
+
+P0 — Security
+- remove plaintext GitHub tokens from DB
+- authenticate API
+- restrict CORS
+- harden ZIP/file handling
+- remove sensitive logs from source control
+
+P1 — Resume quality
+- section-aware chunking instead of first-3500-character cutoff
+- OCR fallback for scanned PDFs
+- preserve source evidence spans
+- better DOCX layout handling
+
+P1 — GitHub quality
+- one-to-one project/repo matching
+- sample more than last 100 commits or use dedicated contribution APIs
+- explicit “insufficient evidence” state
+- OAuth/account ownership verification
+- token/no-token score normalization
+
+P1 — Ranking validation
+- create recruiter-labeled dataset
+- calculate NDCG@K / Recall@K / Precision@K
+- calibrate ATS/GitHub weights empirically
+- test fairness and subgroup error patterns
+
+P2 — Architecture
+- durable job queue
+- persistent job states
+- async worker architecture
+- PostgreSQL/pgvector at scale
+- object storage for resumes
+
+P2 — Codebase cleanup
+- consolidate legacy parsers/search modules
+- align test suite with active Qwen pipeline
+- remove duplicate verifier implementations
+- centralize configuration and scoring constants
+
+================================================================================
+19. FINAL MENTAL MODEL FOR INTERVIEW
+================================================================================
+
+Remember these five layers:
+
+1. INGEST
+“Get the files and identify the candidate.”
+
+2. UNDERSTAND
+“Convert resume text into structured evidence.”
+
+3. RETRIEVE
+“Find likely candidates with BM25 + vectors + RRF.”
+
+4. SCORE
+“Measure JD fit using 8 evidence components.”
+
+5. VERIFY
+“Check whether public GitHub evidence supports the claims.”
+
+Then say:
+
+“HireFlow is not just a resume keyword matcher. It is a retrieve-then-rerank system
+with structured extraction, evidence validation, semantic retrieval, lexical retrieval,
+and an independent GitHub credibility layer.”
+
+================================================================================
+END OF DOCUMENT
+================================================================================
