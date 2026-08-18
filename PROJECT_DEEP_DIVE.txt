@@ -1,0 +1,152 @@
+================================================================================
+HIREFLOW-LITE: COMPLETE PROJECT DEEP DIVE & ARCHITECTURE GUIDE
+================================================================================
+
+This document provides an exhaustive, deeply technical breakdown of the HireFlow-Lite 
+platform. It covers the file structure, the Applicant Tracking System (ATS) pipeline, 
+the GitHub Verification engine, data flow, edge cases, and difficult interview questions 
+you might face when presenting this project.
+
+--------------------------------------------------------------------------------
+1. FILE-BY-FILE CODEBASE BREAKDOWN
+--------------------------------------------------------------------------------
+
+Core Infrastructure:
+- server.py: The main FastAPI web server. Handles all HTTP requests, serves the UI, 
+  and manages asynchronous BackgroundTasks for ingestion and searching using SSE (Server-Sent Events).
+- database.py: Manages the SQLite database (`hireflow.db`). Uses `sqlite-vec` to create 
+  virtual tables for fast, native vector similarity search without needing a heavy database like Pinecone.
+- minilm.py: A lightweight wrapper around the `sentence-transformers` library (all-MiniLM-L6-v2). 
+  It converts text (resumes or JDs) into 384-dimensional dense vector embeddings.
+
+Data Ingestion & Parsing:
+- ingest.py: The entry point for adding candidates. It reads a CSV of students, matches 
+  them with PDF/DOCX files, parses them, embeds them, and saves them to the database.
+- document_extractor.py: Uses PyMuPDF (fitz) and python-docx to extract raw, unformatted 
+  text from candidate resumes.
+- resume_parser.py & qwen_resume_parser.py: The brains of the parsing operation. 
+  It uses a local SLM (Small Language Model like Qwen 2.5 via Ollama) to read the raw text 
+  and intelligently extract structured JSON (skills, experience, projects, education).
+- qwen_schema.py & qwen_validator.py: Ensures the LLM outputs strict JSON matching our 
+  expected schema using Pydantic, preventing hallucinated or malformed data.
+
+Search & Ranking (ATS Engine):
+- search.py: The entry point for the HR dashboard. Takes a Job Description (JD), 
+  embeds it, retrieves the top candidates, verifies their GitHub, and returns a final ranked list.
+- ats_engine.py & hybrid_search.py: Executes the actual scoring. Uses RRF (Reciprocal Rank Fusion) 
+  to combine exact keyword matching (BM25) with semantic meaning (Vector Similarity).
+
+GitHub Verification:
+- github_verifier.py: Connects to the GitHub GraphQL API. Fetches 39 specific data points 
+  (commit history, languages, fork ratios, active days) to build a "True Developer" profile.
+- project_verifier.py: The anti-fraud system. Compares projects claimed on the resume 
+  against actual repositories on the candidate's GitHub using semantic similarity, 
+  verifying if they actually built what they claim.
+
+--------------------------------------------------------------------------------
+2. HOW THE ATS WORKS IN DETAIL (Data Flow & Processing)
+--------------------------------------------------------------------------------
+
+Step 1: Document Extraction
+When a resume is uploaded, `document_extractor.py` strips away all formatting, images, 
+and columns, leaving pure text. 
+
+Step 2: Intelligent Parsing (SLM)
+Traditional ATS systems use Regex to find keywords, which often fails if a candidate writes 
+"Built APIs in Python" instead of just "Python". HireFlow sends the raw text to a local 
+LLM (Qwen). The LLM reads the context and outputs a strictly typed JSON object:
+{ "skills": ["Python", "FastAPI"], "experience": 2, "projects": [{"name": "ATS", ...}] }
+
+Step 3: Embedding & Storage
+`minilm.py` converts the candidate's entire parsed profile into a 384-dimensional vector 
+array (an array of floats representing semantic meaning). This vector, along with the JSON data, 
+is stored in `hireflow.db` using `sqlite-vec`.
+
+Step 4: Search & Retrieval (Example Case)
+- Case: HR pastes a JD for a "Backend Python Developer with AI experience".
+- Action: `search.py` embeds the JD into a vector. 
+- Hybrid Search: `hybrid_search.py` runs a vector cosine-similarity search in the database 
+  (finding candidates semantically close to the JD) AND a BM25 lexical search (finding exact keyword matches). 
+- Scoring: `ats_engine.py` assigns a base ATS score out of 100 based on skill overlap, 
+  experience match, and vector similarity.
+
+--------------------------------------------------------------------------------
+3. GITHUB VERIFICATION SYSTEM (The Anti-Fraud Layer)
+--------------------------------------------------------------------------------
+
+Once the ATS shortlists the top candidates, HireFlow dynamically investigates their GitHub.
+This prevents candidates from lying on their resumes.
+
+Data Evaluated (39 Factors):
+- Contribution Graph: Longest streak, active weekend commits (shows passion vs just doing homework).
+- Code Originality: High fork ratio is penalized (did they just fork someone else's code?).
+- Tech Stack Alignment: Does the primary language in their repos match the skills on their resume?
+- Project Verification: `project_verifier.py` uses MiniLM to embed the descriptions of the projects 
+  listed on their resume, and compares them against the README files of their GitHub repos. 
+  If Cosine Similarity > 0.55, the project is mathematically verified as existing.
+
+The ATS Score and GitHub Score are then combined via a weighted algorithm (e.g., 50/50) 
+to produce the final Candidate Rank.
+
+--------------------------------------------------------------------------------
+4. EDGE CASES HANDLED
+--------------------------------------------------------------------------------
+
+1. Candidate lies about project names: A candidate might call a project "E-Commerce App" 
+   on their resume but the repo is named "shop-backend". 
+   - FIX: `project_verifier.py` embeds the *descriptions* and READMEs, not just titles, 
+     finding semantic matches even if titles differ.
+2. Local LLM Hallucinations: Small LLMs can output broken JSON.
+   - FIX: `qwen_validator.py` catches syntax errors, repairs them, or forces a retry, 
+     ensuring the database never receives corrupt data.
+3. GitHub Rate Limits: Polling the GitHub API for hundreds of candidates will cause a ban.
+   - FIX: HireFlow implements a local SQLite cache for GitHub data (`github_cache` dir).
+
+--------------------------------------------------------------------------------
+5. PROS AND CONS OF THIS ARCHITECTURE
+--------------------------------------------------------------------------------
+
+PROS:
+- 100% Data Privacy: By using Ollama (Qwen) and MiniLM locally, no resume data is sent 
+  to OpenAI or cloud providers. Highly secure for enterprise HR.
+- Cost Efficient: Zero API costs. Everything runs on local compute (CPU/GPU).
+- High Accuracy: Merges lexical (BM25) and semantic (Vectors) search, so synonyms don't fail.
+- Anti-Fraud: The GitHub verifier mathematically proves a candidate's claims.
+
+CONS:
+- Hardware Dependent: Running LLMs locally requires decent RAM/VRAM. On older laptops, 
+  parsing 100 resumes can take significantly longer than using an API.
+- LLM Variability: SLMs (1.5B - 8B params) aren't as smart as GPT-4, meaning highly 
+  complex or deeply unstructured resumes might occasionally drop data during extraction.
+
+--------------------------------------------------------------------------------
+6. HARD HR / TECHNICAL INTERVIEW QUESTIONS (And How to Answer Them)
+--------------------------------------------------------------------------------
+
+Q1: "Why did you use SQLite-vec instead of Pinecone or Milvus for vector storage?"
+A: "Pinecone requires a cloud connection and monthly fees, while Milvus requires a heavy 
+Docker/Java setup. Because I wanted HireFlow-Lite to be completely private, self-contained, 
+and deployable anywhere without infrastructure overhead, SQLite-vec was the perfect choice. 
+It offers native C-level vector operations right alongside standard relational data."
+
+Q2: "How do you handle a scenario where a candidate contributes to private repositories? 
+Won't your GitHub verifier unfairly penalize them?"
+A: "This is a known limitation of the GitHub GraphQL API. However, candidates can check the 
+'Include private contributions on my profile' setting in GitHub. If they do, our verifier 
+will see their total commit counts and streaks, even if it can't read the private code. 
+Additionally, the system is weighted: GitHub is only a percentage of the final score; 
+a stellar ATS score will still keep them highly ranked."
+
+Q3: "Cosine similarity can sometimes yield high scores for opposite meanings 
+(e.g., 'I know Python' vs 'I do not know Python'). How does your ATS handle this?"
+A: "This is exactly why we use a Hybrid Search approach. Vector search is great for 
+conceptual matching, but we cross-reference it with BM25 (exact keyword matching) 
+and explicit structured JSON extraction (the LLM explicitly outputs a list of skills). 
+The final score is a composite, preventing semantic false-positives."
+
+Q4: "If you were to scale this to 100,000 resumes a day, what would break first, and how would you fix it?"
+A: "The local LLM parsing via Ollama would be the immediate bottleneck, as it processes 
+sequentially and is compute-heavy. To scale, I would decouple the parsing into a distributed 
+message queue (like Celery/RabbitMQ) and spin up multiple GPU worker nodes dedicated solely 
+to Qwen inference. The SQLite database would also need to be migrated to PostgreSQL with pgvector 
+to handle concurrent multi-threaded writes."
