@@ -1,0 +1,199 @@
+{
+  "candidate": {
+    "candidate_name": "HARI KRISHNAN S",
+    "email": "harikrishnan451811@gmail.com",
+    "phone": "8124063917",
+    "github_url": "github.com/Harikrishnan76",
+    "linkedin_url": "linkedin.com/in/harikrishnan434"
+  },
+  "education": [
+    {
+      "institution": null,
+      "degree": "B.Tech Artificial Intelligence and Data Science",
+      "field": "Chennai Institute Of Technology",
+      "cgpa": null,
+      "start_date": "2023",
+      "end_date": "2027"
+    }
+  ],
+  "experience": [
+    {
+      "organization": null,
+      "role": "Research Intern At, CHENNAI INSTITUTE OF TECHNOLOGY",
+      "type": "employment",
+      "description": [],
+      "technologies": [],
+      "start_date": "06/2025",
+      "end_date": "07/2025",
+      "source_lines": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "organization": null,
+      "role": "Artificial Intelligence Fullstack Development Intern at, ICONIX SOFTWARE SOLUTIONS",
+      "type": "employment",
+      "description": [],
+      "technologies": [],
+      "start_date": "11/2024",
+      "end_date": "12/2024",
+      "source_lines": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "project_name": "DevConnect - FullStack Developer Networking Platform",
+      "description": "Developed a full-stack developer networking platform with secure authentication, developer profiles, social feeds, GitHub integration, and an automated resume builder. Implemented real-time messaging, notifications, follow/unfollow functionality, skill endorsements, and role-based access control to enhance user collaboration. Designed scalable RESTful APIs and a responsive, production-ready architecture with optimized data management and secure file handling.",
+      "technologies": [
+        "React",
+        "TypeScript",
+        "Vite",
+        "Tailwind CSS",
+        "Node.js",
+        "Express.js",
+        "JWT Authentication",
+        "PostgreSQL",
+        "Prisma ORM",
+        "Redis (Caching)"
+      ],
+      "start_date": "06/2026",
+      "end_date": "07/2026",
+      "url": null,
+      "source_lines": [
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Telemedicine Application for Automated Detection of Pediatric Pneumonia and Skin Cancer",
+      "description": "Built an AI-powered telemedicine application using MobileNetV2 transfer learning, achieving 96.7% recall (pneumonia) and 91.2% classification accuracy (skin cancer). Performed image preprocessing, data augmentation, and GPU-accelerated training on Google Colab to boost model generalization. Integrated Grad-CAM explainability and deployed the end-to-end inference system on Streamlit Cloud for real-time clinical decision support.",
+      "technologies": [
+        "Python",
+        "TensorFlow 2.15.0",
+        "Google Colab",
+        "Streamlit"
+      ],
+      "start_date": "06/2025",
+      "end_date": "07/2025",
+      "url": null,
+      "source_lines": [
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "GenAI YouTube Video Summarization Chatbot",
+      "description": "Extracted YouTube transcripts and built a LangChain NLP pipeline to generate concise, timestamped, multilingual summaries using LLMs (GPT / Mistral). Integrated FAISS semantic embeddings for context-aware question answering over summarized video content. Added speech-to-text voice query support and deployed an interactive Streamlit app with multi-language output and exportable summaries.",
+      "technologies": [
+        "LangChain",
+        "OpenAI GPT or Mixtral",
+        "SpeechRecognition",
+        "Streamlit",
+        "YouTube Transcript",
+        "python"
+      ],
+      "start_date": "04/2025",
+      "end_date": "05/2025",
+      "url": null,
+      "source_lines": [
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47
+      ],
+      "confidence": "High"
+    }
+  ],
+  "skills": {
+    "programming_languages": [
+      "Python",
+      "C",
+      "C++"
+    ],
+    "frameworks": [
+      "FastAPI",
+      "Streamlit",
+      "HTML",
+      "CSS",
+      "ReactJS",
+      "n8n"
+    ],
+    "libraries": [
+      "BERT",
+      "MobileNetV2",
+      "Pytorch",
+      "Jupyter Notebooks",
+      "Edge profiling"
+    ],
+    "databases": [
+      "MySQL",
+      "MongoDB",
+      "PostgreSQL"
+    ],
+    "cloud": [
+      "AWS (S3, Lambda, Cloud Deployment)",
+      "Streamlit Cloud",
+      "Google Colab (GPU)",
+      "Google Drive API"
+    ],
+    "tools": [
+      "Git",
+      "GitHub",
+      "Tkinter",
+      "Figma"
+    ],
+    "other": []
+  },
+  "certifications": [
+    "AWS Cloud Practitioner \u2013 Foundational",
+    "AICTE Virtual Internship - Networking (Zscaler)",
+    "Google Android Developer",
+    "Cisco \u2013 Introduction to Modern AI",
+    "Introduction to Data science | Python essentials 1 & 2",
+    "CyberOps",
+    "CCNA 1,2,3"
+  ],
+  "achievements": [
+    "Successfully qualified GATE 2026, showcasing strong analytical and technical aptitude."
+  ],
+  "competitive_programming": [],
+  "volunteering": [
+    "Volunteered in, leading social initiatives like environmental cleaning and community awareness programs in NSS.",
+    "Organized paper presentation event at a national-level technical symposium, planning, scheduling, and participant management."
+  ],
+  "status": "valid",
+  "parser_metadata": {
+    "model": "qwen2.5:3b-instruct",
+    "latency_ms": 32047.2,
+    "engine": "Ollama-API"
+  }
+}

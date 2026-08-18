@@ -1,0 +1,114 @@
+{
+  "name": "LINNGESHWAR B",
+  "email": "lingaeshrajan@gmail.com",
+  "github_username": "",
+  "phone": "+91 9042298605",
+  "skills": [
+    "Aws",
+    "Css",
+    "Django",
+    "Docker",
+    "Express",
+    "Framer Motion",
+    "Git",
+    "Html",
+    "Javascript",
+    "Mongodb",
+    "Mysql",
+    "Next.Js",
+    "Node.Js",
+    "Postgresql",
+    "Python",
+    "React",
+    "Rest Apis",
+    "Tailwind Css",
+    "Typescript",
+    "Vercel"
+  ],
+  "projects": [
+    {
+      "name": "Revil Symposium",
+      "description": "Revil Symposium \u2014 Full-Stack Event Management Platform  2024 Next.js, Node.js, Express.js, PostgreSQL, Tailwind CSS",
+      "technologies": [
+        "Express",
+        "Next.Js",
+        "Node.Js",
+        "Postgresql",
+        "Tailwind Css"
+      ],
+      "confidence": 0.75,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          35
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": [
+          35
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 35,
+          "text": "Revil Symposium \u2014 Full-Stack Event Management Platform  2024 Next.js, Node.js, Express.js, PostgreSQL, Tailwind CSS",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.0,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            36.0,
+            435.2,
+            275.3,
+            455.7
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Interactive Personal Portfolio Next.js 14, Framer Motion, Tailwind CSS, Vercel",
+      "description": "Interactive Personal Portfolio  2024 Next.js 14, Framer Motion, Tailwind CSS, Vercel",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          54
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 54,
+          "text": "Interactive Personal Portfolio  2024 Next.js 14, Framer Motion, Tailwind CSS, Vercel",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.0,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            36.0,
+            603.5,
+            187.7,
+            623.9
+          ],
+          "page": 0
+        }
+      ]
+    }
+  ],
+  "education": "",
+  "layout_metadata": {
+    "engine": "PyMuPDF",
+    "pdf_type": "text_based",
+    "is_complex_layout": false,
+    "has_encoding_issues": false,
+    "pages_with_columns": [],
+    "pages_with_tables": [],
+    "inspector_latency_ms": 0
+  },
+  "raw_text": "LINNGESHWAR B\n+91 9042298605  |  lingaeshrajan@gmail.com  |  LinkedIn  |  GitHub |  linngeshwar.engineer\nSUMMARY\nB.E. Computer Science student (CGPA 8.72) with expertise in full-stack development (Next.js, Express) and cybersecurity. Proven track record in automation and portal engineering, notably digitizing Titan Company's ID requisition workflow to reduce turnaround by 70% and architecting an event platform for 1,000+ users.\nEDUCATION\nB.E. Computer Science and Engineering (Cyber Security)  2023 \u2013 2027 Chennai Institute of Technology, Tamil Nadu  |  CGPA: 8.72 / 10.0 (6 semesters) TECHNICAL SKILLS Languages:  C++, JavaScript, TypeScript, Python,SQL Frontend:  React, Next.js, HTML, CSS, Tailwind CSS, Framer Motion Backend:  Node.js, Express.js, Django, REST APIs, PostgreSQL, MongoDB, MySQL DevOps & Security:  Git, Wireshark, Nmap,Docker, Automation 360 INTERNSHIP EXPERIENCE\nSoftware Development  Nov 2024 \u2013 Jan 2025 Titan Company Limited  |  Bangalore, India\n\u2013\u200b\nBuilt a full-stack ID Requisition Portal (Next.js, Django, PostgreSQL) that fully digitised a manual paper/email workflow for 20\u201350 employees, cutting request turnaround time by an estimated 60\u201370%.\n\u2013\u200b\nEngineered role-based access control and dynamic form validation, enabling scoped admin operations and reducing data-entry errors across the requisition lifecycle.\nRPA Developer Intern  May 2024 \u2013 Jun 2024 Titan Company Limited  |  Bangalore, India\n\u2013\u200b\nDesigned and deployed an Automation 360 RPA bot that cleared 5,000+ accumulated emails in a single run, reducing inbox processing time by an estimated 80%.\n\u2013\u200b\nDeployed an Automation 360 RPA bot that auto-processed a backlog of thousands of accumulated emails; bot has remained in active production use at Titan since deployment, demonstrating long-term enterprise reliability\n\u2013\u200b\nCollaborated with cross-functional teams to identify and automate 3+ repetitive internal workflows, cutting manual effort by 40\u201350% and delivering measurable productivity gains across live business operations.\nPROJECTS\nRevil Symposium \u2014 Full-Stack Event Management Platform  2024 Next.js, Node.js, Express.js, PostgreSQL, Tailwind CSS\n\u2013\u200b\nArchitected and led development of a full-stack platform that handled 1,000+ event registrations end-to-end, from sign-up through on-site check-in and certificate issuance.\n\u2013\u200b\nReduced per-attendee check-in time from ~3 minutes to under 10 seconds by implementing QR-code-based verification with real-time database lookups, and eliminated 100% of manual certificate generation via automated PDF issuance triggered on check-in.\n\u2013\u200b\nDesigned a multi-tier RBAC system across 3 admin roles (Super Admin, Event Manager, Volunteer) with scoped permissions and audit logging, and built live analytics dashboards tracking registration rates, attendance patterns, and capacity utilisation.\nAutomated Penetration Testing | Pentesting-tool\n\u2013\u200b\nEngineered a modular penetration testing tool to automate the detection of common web application vulnerabilities, including SQL injection and Cross-Site Scripting (XSS).\n\u2013\u200b\nStreamlined the security audit process, reducing manual testing time by an estimated 40% in initial tests.\n\u2013\u200b\nSuccessfully identified over 15 distinct vulnerability types in sample applications during testing phases.\nInteractive Personal Portfolio  2024 Next.js 14, Framer Motion, Tailwind CSS, Vercel\n\u2013\u200b\nDeveloped a fully responsive, component-driven portfolio using Next.js App Router with dynamic routing and server-side rendering, achieving fast load times and high Lighthouse performance scores.\n\u2013\u200b\nEngineered fluid page transitions, scroll-triggered animations, and micro-interactions using Framer Motion, creating a polished user experience that showcases projects, skills, and contact information cohesively.\n\u2013\u200b\nImplemented a reusable and component-based architecture using React and Next.js, ensuring scalability and maintainability.\nACHIEVEMENTS & LEADERSHIP\n\u2013\u200b\nJPMorgan Chase Code for Good Hackathon 2025 \u2013 Runner-Up:  Delivered a full-stack non-profit web application within 24 hours as part of\na cross-functional team, earning a top finalist position from a highly competitive national pool.\n\u2013\u200b\nIntra-Collegiate Code-a-Thon Finalist (2023 & 2024):  Placed among finalists in two consecutive annual competitive programming contests,\ndemonstrating consistent proficiency in algorithms and data structures.\n\u2013\u200b\nVice President, College Technical Club (2025):  Spearheaded technical workshops and speaker sessions on Cybersecurity, the Dark Web,\nand AI attended by 100+ students; managed end-to-end event logistics and team coordination.\nCERTIFICATIONS\nAWS:  Cloud Practitioner    |    Cisco:  Networking Essentials, Cybersecurity Essentials, Introduction to Cybersecurity, CCNA 1,2,3 , Python Essentials 1,2 ServiceNow:  CAD, CSA    |    Automation 360:  Bot Developer, Business Analyst    |    NPTEL:  Cloud Computing, DBMS,Human Computer Interaction, Data Analytics with Python    |    Coursera:  Tools of Trade, Connect and Protect",
+  "parse_time_ms": 18.5
+}

@@ -1,0 +1,40 @@
+{
+  "name": "GOPI R K",
+  "email": "",
+  "github_username": "",
+  "phone": "9345869720",
+  "skills": [
+    "Aws",
+    "Cargo",
+    "Docker",
+    "Evm",
+    "Fastapi",
+    "Git",
+    "Graphql",
+    "Mcp",
+    "Mysql",
+    "Next.Js",
+    "Opencv",
+    "Python",
+    "React",
+    "Rest Apis",
+    "Rust",
+    "Tensorflow",
+    "Tokio",
+    "Typescript",
+    "Web3"
+  ],
+  "projects": [],
+  "education": "Bachelor of Technology in Computer Science and Engineering  ( AI  & DS) (CGPA: 7.8 / 10)\nOpen source Contribution MOFA \u2013 Multi-Observable Framework for AI Agents (Rust, Cargo, Async Plugins)\nResolved a critical lifecycle bug across 4 core plugins (LLM, Tool, Storage, TTS) to ensure proper state tran",
+  "layout_metadata": {
+    "engine": "python-docx",
+    "pdf_type": "docx",
+    "is_complex_layout": false,
+    "has_encoding_issues": false,
+    "pages_with_columns": [],
+    "pages_with_tables": [],
+    "inspector_latency_ms": 0
+  },
+  "raw_text": "GOPI R K\n| 9345869720 | |\nEducation\nChennai Institute of Technology, Chennai Sep 2023 \u2013  June 2027 Bachelor of Technology in Computer Science and Engineering  ( AI  & DS) (CGPA: 7.8 / 10)\nOpen source Contribution MOFA \u2013 Multi-Observable Framework for AI Agents (Rust, Cargo, Async Plugins)\nResolved a critical lifecycle bug across 4 core plugins (LLM, Tool, Storage, TTS) to ensure proper state transitions from  stop( ) to Loaded.\nAuthored 26+ unit and lifecycle tests for the  AgentForge  state machine, validating restart  behaviors  and documenting invariants.\nConsolidated workspace dependencies (e.g.,  reqwest ), significantly reducing binary bloat and compile times.\nFireForm  (AI-powered Emergency Report System)  Engineered an automated multilingual translation pipeline and an interactive feedback API for multi-turn, voice-to-schema incident reporting.\nPrevented concurrent overwrite bugs by fixing a critical PDF generation race condition using UUID4 file-naming.\nEnhanced LLM form-filling reliability by refactoring to label-based PDF mapping, backed by 17+ robust unit tests for JSON parsing.\nPROJECTS HireFlow  \u2014 AI-Powered Candidate Screening & GitHub Verification Platform  (Python,  FastAPI , Sentence  Transformers, BM25, GitHub  GraphQL , NLP) \u2022 Built an AI-driven recruitment platform that parses PDF/DOCX resumes, extracts candidate skills/projects, and ranks applicants using  hybrid ATS scoring combining BM25 keyword retrieval and Sentence-Transformer semantic matching.\n\u2022 Developed a GitHub verification engine leveraging  GraphQL  APIs to evaluate repository authenticity, coding activity, technology  alignment, and project credibility through configurable multi-factor candidate assessment.\n\u2022 Generated explainable hiring reports with ATS score, GitHub score, matched/missing skills, and final candidate rankings, enabling recruiters to shortlist applicants faster and with higher confidence. AgentNexus  \u2014 Autonomous AI Agent Wallet & Payment Infrastructure (x402 Payments,  MultiChain  Walle t )\n\u2022 Developed a non-custodial wallet SDK enabling autonomous AI agents to securely manage digital assets, sign transactions, and interact with blockchain networks through a unified abstraction layer.\n\u2022 Implemented programmable payment workflows using x402-based agent-to-agent transactions, spend controls, and policy-driven authorization mechanisms for automated service payments.\n\u2022 Built a modular multi-chain architecture supporting wallet management, transaction monitoring, and developer-friendly APIs for integrating payment capabilities into agentic AI applications. BacklogBridge  MCP \u2014 Agentic Issue Tracking Server (Rust, Model Context Protocol, Tokio, Serde) \u2022 Architected a high-performance Model Context Protocol (MCP) server in Rust to bridge autonomous AI agents with project management APIs, enabling seamless automation of issue tracking, Git workflows, and documentation.  \u2022 Engineered a modular toolkit of 36+ asynchronous tools with granular feature-flag controls, allowing AI clients to securely execute read/write operations across pull requests, wikis, and shared files without compromising system integrity.  \u2022 Implemented a standardized  category_resource_action  naming convention and strict stateless routing to optimize tool discovery and context filtering, significantly reducing token overhead for LLMs managing the software development lifecycle.\nCompetitive programming:\nLeetCode : ( ) Top 25% Globally, Solved 500+ problems, Max Rating 1500+ CodeChef : ( ) 2-star Div 4, Max Rating 1400+\nCertifications\nAWS Certified Cloud Practitioner (CLF- C02) Feb 2025\nCisco \u2013 Introduction to Cybersecurity , Cybersecurity Essentials \tNov 2023 Coursera \u2013 Data Structure , Algorithms on Strings, Algorithms on Graph \tJun 2024\nAchievements\nAmazon ML Challenge 2025 Rank -2015/210000 Teams( Top ~10%)\nTechnologies\nPrimary: Python, Rust,  c++ , FastAPI , GenAI,  LangChain , MCP, Next.js, TypeScript, Web3/EVM, x402 Protocol,  GraphQL , DSA Secondary: React + Vite, REST APIs, OpenCV , Tensorflow , Mysql , Mongo DB, AWS , QLite-vec , Sentence-Transformers, Docker .\nVolunteering\nCIT Takshashila 2024 (College Cultural Event): Conducted an online photography event",
+  "parse_time_ms": 85.2
+}

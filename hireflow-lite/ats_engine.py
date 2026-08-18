@@ -37,7 +37,10 @@ from __future__ import annotations
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["TQDM_DISABLE"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN_WARNING"] = "1"
 
 import re
 import math
@@ -47,27 +50,15 @@ from typing import Optional
 
 import numpy as np
 
-# ── GPU / Model ───────────────────────────────────────────────────────────────
+# ── SBERT Embedding Model (runs on CPU — 5ms per doc, leaves 100% VRAM for Ollama GPU) ──
 
 DEVICE = "cpu"
 _MODEL = None
 
-try:
-    import torch
-    if torch.cuda.is_available():
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cuda.matmul.allow_tf32 = True
-        DEVICE = "cuda"
-except ImportError:
-    pass
-
 
 def _get_model():
-    global _MODEL
-    if _MODEL is None:
-        from sentence_transformers import SentenceTransformer
-        _MODEL = SentenceTransformer("all-MiniLM-L6-v2", device=DEVICE)
-    return _MODEL
+    from minilm import get_minilm_model
+    return get_minilm_model(device="cpu")
 
 
 def _encode(texts: list[str], model=None) -> np.ndarray:

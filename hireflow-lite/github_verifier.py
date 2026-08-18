@@ -186,18 +186,139 @@ def _track_rate_limit(data: dict) -> None:
             _RATE_LIMIT_STATS["last_reset"] = reset_at
 
 
+def _fetch_github_rest(username: str) -> dict:
+    """
+    Fetch GitHub profile via unauthenticated REST API.
+    Uses ~3 REST calls (profile + repos + contributions).
+    Free limit: 60 requests/hour per IP.
+    Converts REST response to same dict shape as the GraphQL query.
+    """
+    import time as _time
+    GITHUB_REST = "https://api.github.com"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "HireFlow-Lite-ATS/4.0",
+    }
+
+    def _get(path: str) -> dict | list | None:
+        url = f"{GITHUB_REST}{path}"
+        try:
+            with httpx.Client(timeout=20.0) as client:
+                resp = client.get(url, headers=headers)
+            if resp.status_code == 403:
+                remaining = resp.headers.get("X-RateLimit-Remaining", "1")
+                if remaining == "0":
+                    reset_ts = int(resp.headers.get("X-RateLimit-Reset", _time.time() + 60))
+                    wait = max(reset_ts - int(_time.time()) + 5, 10)
+                    print(f"  → [GitHub REST] Rate limit. Waiting {wait}s...")
+                    _time.sleep(wait)
+                    with httpx.Client(timeout=20.0) as client:
+                        resp = client.get(url, headers=headers)
+            if resp.status_code == 404:
+                return None
+            if resp.status_code != 200:
+                return None
+            return resp.json()
+        except Exception as e:
+            print(f"  → [GitHub REST] Error fetching {url}: {e}")
+            return None
+
+    # 1) User profile
+    user_data = _get(f"/users/{username}")
+    if not user_data or "login" not in user_data:
+        raise RuntimeError(f"GitHub user '{username}' not found via REST API.")
+
+    # 2) Repos (up to 30, sorted by updated)
+    repos_data = _get(f"/users/{username}/repos?per_page=30&sort=updated&type=owner") or []
+
+    # Build repos in GraphQL shape
+    repos_nodes = []
+    for r in repos_data[:30]:
+        lang = r.get("language")
+        repos_nodes.append({
+            "name":          r.get("name", ""),
+            "description":   r.get("description", ""),
+            "isFork":        r.get("fork", False),
+            "stargazerCount": r.get("stargazers_count", 0),
+            "forkCount":     r.get("forks_count", 0),
+            "createdAt":     r.get("created_at", ""),
+            "updatedAt":     r.get("updated_at", ""),
+            "pushedAt":      r.get("pushed_at", ""),
+            "primaryLanguage": {"name": lang} if lang else None,
+            "languages":     {"edges": []},
+            "repositoryTopics": {"nodes": []},
+            "defaultBranchRef": {
+                "target": {
+                    "history": {"totalCount": r.get("size", 0)}
+                }
+            },
+            "object": None,
+        })
+
+    # 3) Contribution events (last 90 days via events API — counts commits)
+    events_data = _get(f"/users/{username}/events/public?per_page=100") or []
+    total_commits = 0
+    contribution_days_map: dict[str, int] = {}
+    for ev in events_data:
+        if ev.get("type") == "PushEvent":
+            payload = ev.get("payload", {})
+            commits = payload.get("distinct_size", payload.get("size", 1))
+            total_commits += commits
+            date_str = (ev.get("created_at") or "")[:10]
+            if date_str:
+                contribution_days_map[date_str] = contribution_days_map.get(date_str, 0) + commits
+
+    # Build contribution calendar shape
+    weeks_days = [{"date": d, "contributionCount": c} for d, c in sorted(contribution_days_map.items())]
+
+    # Assemble into the same shape as GraphQL data.user
+    user_dict = {
+        "name":       user_data.get("name", username),
+        "email":      user_data.get("email", "") or "",
+        "createdAt":  user_data.get("created_at", ""),
+        "bio":        user_data.get("bio", "") or "",
+        "avatarUrl":  user_data.get("avatar_url", "") or "",
+        "location":   user_data.get("location", "") or "",
+        "websiteUrl": user_data.get("blog", "") or "",
+        "isHireable": user_data.get("hireable", False) or False,
+        "followers":  {"totalCount": user_data.get("followers", 0)},
+        "organizations": {"nodes": []},
+        "contributionsCollection": {
+            "totalCommitContributions": total_commits,
+            "totalPullRequestContributions": 0,
+            "totalIssueContributions": 0,
+            "contributionCalendar": {
+                "totalContributions": sum(contribution_days_map.values()),
+                "weeks": [{"contributionDays": weeks_days}],
+            },
+        },
+        "pinnedItems": {"nodes": []},
+        "repositories": {"nodes": repos_nodes},
+    }
+    return user_dict
+
+
 def fetch_github_profile(username: str, token: str) -> dict:
     """
-    Fetch a GitHub user profile via the GraphQL API (synchronous).
+    Fetch a GitHub user profile.
+    - With token: uses GraphQL API (5000 requests/hr).
+    - Without token: uses REST API (60 requests/hr free limit).
 
-    Returns the ``data.user`` dict from the GraphQL response.
-    Raises ``RuntimeError`` on HTTP or GraphQL-level errors.
+    Returns the user dict in the same shape as the GraphQL query.
     """
     # Check cache first
     cached = _read_cache(username)
     if cached is not None:
         print(f"  → Using cached GitHub data for {username}")
         return cached
+
+    # No token → use free REST API (60 req/hr unauthenticated)
+    if not token or token.strip() == "":
+        print(f"  → No GitHub token — using unauthenticated REST API (60 req/hr free limit)")
+        user = _fetch_github_rest(username)
+        _write_cache(username, user)
+        return user
 
     headers = {
         "Authorization": f"Bearer {token}",

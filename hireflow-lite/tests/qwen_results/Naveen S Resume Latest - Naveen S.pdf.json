@@ -1,0 +1,161 @@
+{
+  "candidate": {
+    "candidate_name": "Naveen S",
+    "email": "naveens.aids2023@citchennai.net",
+    "phone": "9994448964",
+    "github_url": "Github",
+    "linkedin_url": "LinkedIn"
+  },
+  "education": [
+    {
+      "institution": null,
+      "degree": "B.Tech Artificial Intelligence and Data Science",
+      "field": null,
+      "cgpa": null,
+      "start_date": "2023 \u2013 2027",
+      "end_date": null
+    }
+  ],
+  "experience": [
+    {
+      "organization": null,
+      "role": "Project Intern",
+      "type": "employment",
+      "description": [],
+      "technologies": [],
+      "start_date": "05/2025",
+      "end_date": "06/2025",
+      "source_lines": [
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "project_name": "Face Liveliness Detection",
+      "description": "Developed a robust Face Liveliness Detection system leveraging the face-recognition package and OpenCV to accurately identify users, prevent spoofing attempts, and enhance overall authentication security. Integrated real-time face detection and verification with live camera input to reliably distinguish between dynamic human faces and static spoofing images, improving system security and authentication accuracy. Applied the solution within the context of secure authentication systems, effectively demonstrating expertise in Python programming, advanced computer vision techniques, and AI-driven security solutions.",
+      "technologies": [
+        "Python",
+        "openCV"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "ChatSphere",
+      "description": "Developed a fully functional real-time chat application that allows users to engage in instant messaging with smooth, responsive interactions, incorporating features for efficient message delivery and enhanced experience. Implemented secure user authentication and private messaging features, ensuring that all conversations remain fully confidential, accessible only to authorized users, and protected against unauthorized access. Designed a clean and modern user interface with interactive features such as online/offline indicators, typing status, and persistent chat history, providing a seamless, intuitive, and highly user-friendly messaging experience.",
+      "technologies": [
+        "React.js",
+        "Node.js",
+        "MongoDB",
+        "Express.js"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Chatbot",
+      "description": "Built a Multi-Agent RAG Chatbot with LangChain, ChromaDB & NVIDIA NIM \u2014 routing queries across 3 specialized AI agents using local cosine similarity with ~2ms latency. Solo-built an end-to-end AI chatbot covering data prep, embedding generation, semantic routing, RAG orchestration, and a live Streamlit UI, deployed for Chennai Institute of Technology to handle Admissions, Placements, and Career queries.",
+      "technologies": [
+        "Python",
+        "Langchain",
+        "nextjs",
+        "fastAPI"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "confidence": "High"
+    }
+  ],
+  "skills": {
+    "programming_languages": [
+      "C",
+      "C++",
+      "Python",
+      "JavaScript"
+    ],
+    "frameworks": [],
+    "libraries": [],
+    "databases": [
+      "DBMS",
+      "SQL"
+    ],
+    "cloud": [
+      "CN",
+      "ExpressJs"
+    ],
+    "tools": [
+      "MCP",
+      "NodeJs",
+      "OOPS",
+      "Agentic AI",
+      "RAG"
+    ],
+    "other": []
+  },
+  "certifications": [
+    "NPTEL : Cloud Computing",
+    "Code Gallata : Programming and Data Structures in C++, Java, and Python",
+    "Cisco : Introduction to Networks",
+    "Udemy : The Complete Full-Stack Web Development Bootcamp"
+  ],
+  "achievements": [
+    "Code chef - Achieved 3-star rating on CodeChef, participating in 52 contests and maintaining a rating of 1610.",
+    "Leetcode - Solved 653 problems on LeetCode, attended 68 contests, and earned a rating of 1810.",
+    "CodeForces - Solved 192 competitive programming problems with a current rating of 1193"
+  ],
+  "competitive_programming": [
+    "Code chef",
+    "Leetcode",
+    "CodeForces"
+  ],
+  "volunteering": [
+    "CodeRelay - Organized an event in the National-level Technical Symposium at CIT, managing 20+ participating teams, coordinating logistics, ensuring smooth execution, and overseeing competition judging and scheduling."
+  ],
+  "status": "valid",
+  "parser_metadata": {
+    "model": "qwen2.5:3b-instruct",
+    "latency_ms": 27066.08,
+    "engine": "Ollama-API"
+  }
+}

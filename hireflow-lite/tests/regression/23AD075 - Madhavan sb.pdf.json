@@ -1,0 +1,416 @@
+{
+  "name": "Madhavan S B",
+  "email": "madhavansb133@gmail.com",
+  "github_username": "",
+  "phone": "+91-9363549651",
+  "skills": [
+    "Css",
+    "Flask",
+    "Html",
+    "Java",
+    "Javascript",
+    "Linux",
+    "Mysql",
+    "Numpy",
+    "Pandas",
+    "Postgresql",
+    "Python",
+    "Pytorch",
+    "React",
+    "Rest Apis",
+    "Spring Boot"
+  ],
+  "projects": [
+    {
+      "name": "UG Researcher",
+      "description": "UG Researcher \u2013 AI & Computer Vision \u2013 Chennai Institute of Technology",
+      "technologies": [],
+      "confidence": 0.45,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          16
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 16,
+          "text": "UG Researcher \u2013 AI & Computer Vision \u2013 Chennai Institute of Technology",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 10.0,
+          "is_bold": false,
+          "is_bullet": false,
+          "bbox": [
+            19.9,
+            143.8,
+            352.2,
+            153.8
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Nov 2024 \u2013 Dec 2024",
+      "description": "Researching real-world computer vision systems including OCR pipelines and intelligent vision-based automation. Developed crack detection in civil infrastructure using CNN-based models and GAN-based data augmentation. Designing end-to-end ML pipelines covering data preprocessing, model training, evaluation, and deployment.",
+      "technologies": [],
+      "confidence": 0.8,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          17
+        ],
+        "description_block_ids": [
+          18,
+          19,
+          20
+        ],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 17,
+          "text": "Nov 2024 \u2013 Dec 2024",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            480.7,
+            143.8,
+            574.1,
+            153.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 18,
+          "text": "\u2022 Researching real-world computer vision systems including OCR pipelines and intelligent vision-based automation.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            158.6,
+            526.9,
+            168.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 19,
+          "text": "\u2022 Developed crack detection in civil infrastructure using CNN-based models and GAN-based data augmentation.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            174.8,
+            514.4,
+            184.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 20,
+          "text": "\u2022 Designing end-to-end ML pipelines covering data preprocessing, model training, evaluation, and deployment.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            191.0,
+            505.1,
+            201.0
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "RAG",
+      "description": "Built an end-to-end Retrieval-Augmented Generation (RAG) application for intelligent document querying. Implemented semantic search using SentenceTransformers embeddings and FAISS vector indexing. Built a text-to-image generation pipeline using Stable Diffusion (Dreamlike Diffusion, SDXL) with GPU-accelerated",
+      "technologies": [
+        "Flask",
+        "Python",
+        "Pytorch",
+        "Rest Apis"
+      ],
+      "confidence": 1.0,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          22
+        ],
+        "description_block_ids": [
+          23,
+          24,
+          27,
+          29,
+          30,
+          32,
+          33
+        ],
+        "technology_block_ids": [
+          22,
+          25,
+          28,
+          30
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 22,
+          "text": "RAG-Analyzer \u2013 Python, Flask, FAISS, SentenceTransformers, Groq API, Hugging Face",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            19.9,
+            231.7,
+            408.2,
+            241.7
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 23,
+          "text": "\u2022 Built an end-to-end Retrieval-Augmented Generation (RAG) application for intelligent document querying.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            246.5,
+            501.4,
+            256.5
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 24,
+          "text": "\u2022 Implemented semantic search using SentenceTransformers embeddings and FAISS vector indexing.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            262.7,
+            461.8,
+            272.7
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 27,
+          "text": "\u2022 Built a text-to-image generation pipeline using Stable Diffusion (Dreamlike Diffusion, SDXL) with GPU-accelerated",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            308.5,
+            537.5,
+            318.5
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 29,
+          "text": "\u2022 Implemented prompt-based image synthesis using Hugging Face Diffusers and Transformers .",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            336.6,
+            434.7,
+            346.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 30,
+          "text": "\u2022 Enabled image visualization, saving, and download using Matplotlib. ScopeIt \u2013 Flutter, Dart, Web Scraping, REST APIs, JSON, Selenium",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            19.9,
+            352.9,
+            330.6,
+            377.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 32,
+          "text": "\u2022 Built a cross-platform mobile app aggregating competition data with search and category filtering options.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            382.4,
+            495.8,
+            392.4
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 33,
+          "text": "\u2022 Built a cross-platform application for students and entrepreneurs to create, organize, and manage competitions, events, and",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            398.6,
+            570.3,
+            408.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 25,
+          "text": "\u2022 Integrated Groq LLM with a Flask backend to generate context-aware responses with reduced hallucinations. Text-to-Image Generator \u2013 Python, Hugging Face Diffusers, Transformers, Stable Diffusion, PyTorch",
+          "block_type": "TECHNOLOGY_LINE",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            19.9,
+            278.9,
+            508.1,
+            303.7
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 28,
+          "text": "inference.",
+          "block_type": "TECHNOLOGY_LINE",
+          "font_size": 10.0,
+          "is_bold": false,
+          "is_bullet": false,
+          "bbox": [
+            29.9,
+            320.4,
+            71.2,
+            330.4
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Math Solver",
+      "description": "Developed an Android app to solve handwritten mathematical expressions using AI models. Implemented real-time camera capture, preprocessing, and expression recognition for accurate solutions. Designed a student-friendly interface for quick input, solution display, and step-by-step guidance.",
+      "technologies": [],
+      "confidence": 0.8,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          35
+        ],
+        "description_block_ids": [
+          36,
+          37,
+          38
+        ],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 35,
+          "text": "Math Solver (Android) \u2013 Android, Gemini API, AI Vision-Language Models, Image Processing",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            19.9,
+            425.4,
+            436.7,
+            435.4
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 36,
+          "text": "\u2022 Developed an Android app to solve handwritten mathematical expressions using AI models.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            440.2,
+            431.6,
+            450.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 37,
+          "text": "\u2022 Implemented real-time camera capture, preprocessing, and expression recognition for accurate solutions.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            456.4,
+            484.8,
+            466.4
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 38,
+          "text": "\u2022 Designed a student-friendly interface for quick input, solution display, and step-by-step guidance.",
+          "block_type": "BULLET",
+          "font_size": 10.0,
+          "is_bold": true,
+          "is_bullet": true,
+          "bbox": [
+            20.3,
+            472.6,
+            454.4,
+            482.6
+          ],
+          "page": 0
+        }
+      ]
+    }
+  ],
+  "education": "B.Tech Artificial Intelligence and Data Science (CGPA: 8.35/10)\nChennai, India\nExperience\nUG Researcher \u2013 AI & Computer Vision \u2013 Chennai Institute of Technology\nNov 2024 \u2013 Dec 2024\n\u2022 Researching real-world computer vision systems including OCR pipelines and intelligent vision-based automation.\n\u2022 Dev",
+  "layout_metadata": {
+    "engine": "PyMuPDF",
+    "pdf_type": "text_based",
+    "is_complex_layout": false,
+    "has_encoding_issues": false,
+    "pages_with_columns": [],
+    "pages_with_tables": [],
+    "inspector_latency_ms": 0
+  },
+  "raw_text": "Madhavan S B\nChennai, India\n|\nmadhavansb133@gmail.com\n|\n+91-9363549651\n|\nLinkedin\n|\nGithub\nEducation\nChennai Institute of Technology\n2023 \u2013 2027\nB.Tech Artificial Intelligence and Data Science (CGPA: 8.35/10)\nChennai, India\nExperience\nUG Researcher \u2013 AI & Computer Vision \u2013 Chennai Institute of Technology\nNov 2024 \u2013 Dec 2024\n\u2022 Researching real-world computer vision systems including OCR pipelines and intelligent vision-based automation.\n\u2022 Developed crack detection in civil infrastructure using CNN-based models and GAN-based data augmentation.\n\u2022 Designing end-to-end ML pipelines covering data preprocessing, model training, evaluation, and deployment.\nProjects\nRAG-Analyzer \u2013 Python, Flask, FAISS, SentenceTransformers, Groq API, Hugging Face\n\u2022 Built an end-to-end Retrieval-Augmented Generation (RAG) application for intelligent document querying.\n\u2022 Implemented semantic search using SentenceTransformers embeddings and FAISS vector indexing.\n\u2022 Integrated Groq LLM with a Flask backend to generate context-aware responses with reduced hallucinations. Text-to-Image Generator \u2013 Python, Hugging Face Diffusers, Transformers, Stable Diffusion, PyTorch\n\u2022 Built a text-to-image generation pipeline using Stable Diffusion (Dreamlike Diffusion, SDXL) with GPU-accelerated\ninference.\n\u2022 Implemented prompt-based image synthesis using Hugging Face Diffusers and Transformers .\n\u2022 Enabled image visualization, saving, and download using Matplotlib. ScopeIt \u2013 Flutter, Dart, Web Scraping, REST APIs, JSON, Selenium\n\u2022 Built a cross-platform mobile app aggregating competition data with search and category filtering options.\n\u2022 Built a cross-platform application for students and entrepreneurs to create, organize, and manage competitions, events, and\nhackathons.\nMath Solver (Android) \u2013 Android, Gemini API, AI Vision-Language Models, Image Processing\n\u2022 Developed an Android app to solve handwritten mathematical expressions using AI models.\n\u2022 Implemented real-time camera capture, preprocessing, and expression recognition for accurate solutions.\n\u2022 Designed a student-friendly interface for quick input, solution display, and step-by-step guidance.\nAchievements\n\u2022 Qualified GATE 2026 (Data Science & AI) with AIR 8646 and a score of 365 .\n\u2022 Secured Rank 5790 in TCS CodeVita Season 13 (Round 2).\n\u2022 Achieved Global Rank 5796 in Meta Hacker Cup among 13,000+ participants.\nCompetitive Programming\n\u2022 LeetCode: Max Rating 1815 | Solved 950+ | Top 8.81% globally | Badges: 7 | Highest Rank: 3457.\n\u2022 Codeforces: Max Rating 1115 | Position: Newbie | Solved 250+ | Highest Rank: 5572 in Round 1011 Div 2.\n\u2022 CodeChef: Max Rating 1540 | Position: 2-Star | Solved 280+ | Highest Rank: 1195 in Starter 184 Div 3.\nSkills\nLanguages and Databases: C++, Java(basics), Python, MySQL, PostgreSQL, HTML, CSS, Javascript Technologies: Machine Learning, RAG, LangGraph, PyTorch, Spring Boot(basics), Flutter, Numpy, Pandas, React JS, Node JS Developer Tools: GitHub, Linux, Postman, Colab, Cursor, Antigravity, VS Code.\nCertifications\n\u2022 Coursera: Data Structures & Algorithms | Algorithms on String\n\u2022 Cisco: Python Essential 1 | Introduction to Networks | Introduction to Cybersecurity | Cybersecurity Essentials\n\u2022 NPTEL: Introduction to Database System\nVolunteering\n\u2022 Organizer \u2013 T.A.L.O.S 4.0 (2025) \u2013 Organized a National Level Technical Symposium.",
+  "parse_time_ms": 25.3
+}

@@ -15,3 +15,9 @@ uploads/
 hireflow.db
 .agents/
 scratch/
+check_deps.txt
+out_st.txt
+test_import.txt
+test_sbert_cpu.txt
+models/
+job_results/

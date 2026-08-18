@@ -27,14 +27,8 @@ except Exception:
 
 
 def _get_sbert_model(device: str = "cpu"):
-    """Reuse the SBERT model from ats_engine if already loaded, else load it."""
-    try:
-        from ats_engine import _get_sbert_model as _ats_get_sbert
-        return _ats_get_sbert(device)
-    except ImportError:
-        print("  \u2192 Loading SBERT model for project verification...")
-        from sentence_transformers import SentenceTransformer
-        return SentenceTransformer("all-MiniLM-L6-v2", device=device)
+    from minilm import get_minilm_model
+    return get_minilm_model(device="cpu")
 
 
 def _readme_text(repo: dict) -> str:

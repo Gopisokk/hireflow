@@ -1,0 +1,179 @@
+{
+  "candidate": {
+    "candidate_name": "HARI SUDARSHAN N",
+    "email": "harisudarshan1803@gmail.com",
+    "phone": "+91 9361704172",
+    "github_url": null,
+    "linkedin_url": null
+  },
+  "education": [
+    {
+      "institution": null,
+      "degree": "(B.Tech) - Artificial Intelligence and Data Science (AI & DS)",
+      "field": "Chennai Institute of Technology",
+      "cgpa": null,
+      "start_date": "09/2023",
+      "end_date": "Present"
+    }
+  ],
+  "experience": [
+    {
+      "organization": null,
+      "role": "Inplant Trainee, Madras Atomic Power Station (MAPS)",
+      "type": "employment",
+      "description": [],
+      "technologies": [],
+      "start_date": "06/2025",
+      "end_date": "Present",
+      "source_lines": [
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "project_name": "Controlling a Media Player using Hand Gestures in CNN, Python, OpenCV, Tensorflow, Pytorch, MediaPipe",
+      "description": "Developed a CNN-based real-time system for hands-free media control using gesture recognition techniques. Achieved ~90% accuracy through model and preprocessing optimization.",
+      "technologies": [
+        "Python",
+        "OpenCV",
+        "Tensorflow",
+        "Pytorch",
+        "MediaPipe"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        26,
+        27,
+        28,
+        29
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Trip Planner using Multi-AI Agents, Python, LangChain, OpenAI, FastAPI, Vector Database",
+      "description": "Built a multi-agent AI system to generate personalized travel itineraries by analyzing user preferences, budget, duration, and trip constraints. Implemented agent orchestration with vector-based retrieval to deliver context-aware, accurate, and travel recommendations.",
+      "technologies": [
+        "Python",
+        "LangChain",
+        "OpenAI",
+        "FastAPI",
+        "Vector Database"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        31,
+        32,
+        33,
+        34
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Museum Ticket Booking Chatbot, Python, Regex, JSON, Razorpay API",
+      "description": "Developed a rule-based chatbot for museum ticket booking, allowing users to view details, check availability, and generate booking confirmations. Implemented date validation, availability checks, booking reference generation, and integrated Razorpay for secure and seamless payments.",
+      "technologies": [],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        36,
+        37,
+        38
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Mini Ecommerce Website, React.js, Node.js, Express.js, REST APIs",
+      "description": "Developed a full-stack e-commerce platform with product catalog, cart, and checkout features using the MERN stack. Built RESTful APIs with Node.js and Express.js and designed a responsive React frontend with dynamic routing, using MongoDB for data storage.",
+      "technologies": [
+        "React.js",
+        "Node.js",
+        "Express.js",
+        "REST APIs",
+        "MongoDB"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        40,
+        41,
+        42,
+        43
+      ],
+      "confidence": "High"
+    }
+  ],
+  "skills": {
+    "programming_languages": [
+      "C",
+      "C++",
+      "Python",
+      "Java",
+      "SQL"
+    ],
+    "frameworks": [
+      "Machine Learning",
+      "OpenCV",
+      "PyTorch",
+      "RAG",
+      "CNN",
+      "Image Processing"
+    ],
+    "libraries": [
+      "Scikit-learn",
+      "TensorFlow"
+    ],
+    "databases": [
+      "MySQL",
+      "MongoDB",
+      "PostgreSQL",
+      "Firebase",
+      "Vector DB"
+    ],
+    "cloud": [
+      "AWS"
+    ],
+    "tools": [
+      "Git & GitHub",
+      "Technical Writing",
+      "Web Scraping",
+      "Prompt Engineering"
+    ],
+    "other": []
+  },
+  "certifications": [
+    "AWS Cloud Practitioner Essentails (Amazon Web Services)",
+    "Salesforce Agentforce Specialist (Salesforce)",
+    "Introduction to Data Science (Cisco, Networking Academy)",
+    "Database Management System (NPTEL, Ministry of Education)",
+    "Python Essentials 1 (Cisco, Networking Academy)",
+    "Algorithmic Toolbox (UC San Diego)"
+  ],
+  "achievements": [],
+  "competitive_programming": [
+    "Leetcode : (HariSudarshan) Top 17.81% Globally, Solved 800+ problems, Max Rating 1732, Badges 8, Daily Streak 50+ days",
+    "Codechef : (hari_sudarshan) Div 1, One Star, Max Rating 1384, Best Contest Rank: 3793",
+    "Codeforces : (Hari_Sudarshan) Newbie, Max Rating 880, Best Contest Rank: 12816"
+  ],
+  "volunteering": [
+    "Talos Sponsorship, Chennai Institute of technology",
+    "Assisted in securing sponsorships and managing partnerships for department events"
+  ],
+  "status": "valid",
+  "parser_metadata": {
+    "model": "qwen2.5:3b-instruct",
+    "latency_ms": 30127.49,
+    "engine": "Ollama-API"
+  }
+}

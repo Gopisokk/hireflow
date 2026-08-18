@@ -38,6 +38,12 @@ from database import (
     update_scores, update_github, get_all_students,
 )
 
+import os
+os.environ["TQDM_DISABLE"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN_WARNING"] = "1"
+
 try:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -47,27 +53,15 @@ except Exception:
     pass
 
 
-# ── GPU Setup ─────────────────────────────────────────────────────────────────
+# ── SBERT Setup (CPU mode for instant, crash-free vector encoding) ──────────
 
-def _setup_device() -> str:
-    if torch.cuda.is_available():
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cuda.matmul.allow_tf32 = True
-        return "cuda"
-    return "cpu"
-
-
-DEVICE = _setup_device()
+DEVICE = "cpu"
 _MODEL: Optional[SentenceTransformer] = None
 
 
-def _get_model() -> SentenceTransformer:
-    global _MODEL
-    if _MODEL is None:
-        print("  → Loading all-MiniLM-L6-v2...")
-        _MODEL = SentenceTransformer("all-MiniLM-L6-v2", device=DEVICE)
-        print("  ✓ Model ready.")
-    return _MODEL
+def _get_model():
+    from minilm import get_minilm_model
+    return get_minilm_model(device="cpu")
 
 
 # ── Import ATS engine ────────────────────────────────────────────────────────

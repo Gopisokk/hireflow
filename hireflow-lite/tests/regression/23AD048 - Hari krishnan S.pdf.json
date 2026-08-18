@@ -1,0 +1,656 @@
+{
+  "name": "HARI KRISHNAN S",
+  "email": "harikrishnan451811@gmail.com",
+  "github_username": "Harikrishnan76",
+  "phone": "8124063917",
+  "skills": [
+    "Aws",
+    "Css",
+    "Express",
+    "Fastapi",
+    "Git",
+    "Html",
+    "Mongodb",
+    "Mysql",
+    "Node.Js",
+    "Opencv",
+    "Postgresql",
+    "Python",
+    "Pytorch",
+    "React",
+    "Redis",
+    "Scikit-Learn",
+    "Streamlit",
+    "Tailwind Css",
+    "Tensorflow",
+    "Typescript"
+  ],
+  "projects": [
+    {
+      "name": "Research Intern At,  CHENNAI INSTITUTE OF TECHNOLOGY",
+      "description": "6/2025 \u2013 07/2025  | Chennai,India Built a MobileNetV2-based telemedicine system achieving 98% pneumonia accuracy and 91.2% skin cancer accuracy. Implemented Grad-CAM explainability, improving model transparency and user trust.",
+      "technologies": [
+        "Streamlit",
+        "Tensorflow"
+      ],
+      "confidence": 1.0,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          30
+        ],
+        "description_block_ids": [
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40
+        ],
+        "technology_block_ids": [
+          34,
+          35
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 30,
+          "text": "Research Intern At,  CHENNAI INSTITUTE OF TECHNOLOGY",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            142.2,
+            253.7,
+            154.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 31,
+          "text": "06/2025 \u2013 07/2025  | Chennai,India",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            430.2,
+            142.2,
+            566.9,
+            154.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 32,
+          "text": "\u2022 Built a MobileNetV2-based telemedicine system achieving 98% pneumonia accuracy and 91.2% skin cancer accuracy.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            152.7,
+            497.0,
+            164.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 33,
+          "text": "\u2022 Implemented Grad-CAM explainability, improving model transparency and user trust.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            163.2,
+            372.2,
+            175.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 34,
+          "text": "\u2022 Deployed models on Streamlit Cloud with 3.8s optimized inference latency.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            173.7,
+            332.2,
+            185.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 35,
+          "text": "\u2022 Resolved TensorFlow deployment issues and enabled Google Drive-based model hosting.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            184.2,
+            388.5,
+            196.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 36,
+          "text": "Artificial Intelligence Fullstack Development Intern at,  ICONIX SOFTWARE SOLUTIONS",
+          "block_type": "DESCRIPTION",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            199.9,
+            372.5,
+            211.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 37,
+          "text": "11/2024 \u2013 12/2024  | Tirunelveli, India",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            419.0,
+            199.9,
+            566.9,
+            211.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 38,
+          "text": "\u2022 Developed a secure file management system using AES encryption to protect data and mitigate Sybil attacks.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            210.4,
+            464.7,
+            222.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 39,
+          "text": "\u2022 Built a Tkinter-based desktop application for secure encrypted file storage and access control.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            220.9,
+            405.7,
+            232.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 40,
+          "text": "\u2022 Implemented an ML-based blockchain attack detection model to ensure data integrity through intelligent threat detection.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            231.4,
+            518.3,
+            243.3
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "DevConnect",
+      "description": "Developed a full-stack developer networking platform with secure authentication, developer profiles, social feeds, GitHub integration, and an automated resume builder. Implemented real-time messaging, notifications, follow/unfollow functionality, skill endorsements, and role-based access control to enhance user collaboration. Designed scalable RESTful APIs and a responsive, production-ready architecture with optimized data management and secure file handling.",
+      "technologies": [
+        "Express",
+        "Node.Js",
+        "Postgresql",
+        "React",
+        "Redis",
+        "Tailwind Css",
+        "Typescript"
+      ],
+      "confidence": 1.0,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          41
+        ],
+        "description_block_ids": [
+          43,
+          45,
+          47
+        ],
+        "technology_block_ids": [
+          41
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 41,
+          "text": "DevConnect - FullStack Developer Networking Platform React,TypeScript,Vite,Tailwind CSS,Node.js,Express.js,JWT Authentication,PostgreSQL ,Prisma ORM ,Redis (Caching)",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            268.2,
+            470.4,
+            290.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 43,
+          "text": "\u2022 Developed a full-stack developer networking platform with secure authentication, developer profiles, social feeds, GitHub integration, and an automated resume builder.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            289.2,
+            566.0,
+            311.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 45,
+          "text": "\u2022 Implemented real-time messaging, notifications, follow/unfollow functionality, skill endorsements, and role-based access control to enhance user collaboration.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            310.2,
+            558.0,
+            332.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 47,
+          "text": "\u2022 Designed scalable RESTful APIs and a responsive, production-ready architecture with optimized data management and secure file handling.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            331.2,
+            548.7,
+            353.6
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Telemedicine Application for Automated Detection of Pediatric Pneumonia and Skin Cancer Python",
+      "description": "Built an AI-powered telemedicine application using MobileNetV2 transfer learning, achieving 96.7% recall (pneumonia) and 91.2% classification accuracy (skin cancer) and provides suggestions. Performed image preprocessing, data augmentation, and GPU-accelerated training on Google Colab to boost model generalization. Integrated Grad-CAM explainability and deployed the end-to-end inference system on Streamlit Cloud for real-time clinical decision support.",
+      "technologies": [
+        "Streamlit",
+        "Tensorflow"
+      ],
+      "confidence": 1.0,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          49
+        ],
+        "description_block_ids": [
+          51,
+          53,
+          54
+        ],
+        "technology_block_ids": [
+          49,
+          54
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 49,
+          "text": "Telemedicine Application for Automated Detection of Pediatric Pneumonia and Skin Cancer Python |Open CV| TensorFlow 2.15.0 | Google Colab | Streamlit.",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            357.4,
+            407.1,
+            379.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 51,
+          "text": "\u2022 Built an AI-powered telemedicine application using MobileNetV2 transfer learning, achieving 96.7% recall (pneumonia) and 91.2% classification accuracy (skin cancer) and provides suggestions.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            378.4,
+            549.0,
+            400.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 53,
+          "text": "\u2022 Performed image preprocessing, data augmentation, and GPU-accelerated training on Google Colab to boost model generalization.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            399.4,
+            552.5,
+            411.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 54,
+          "text": "\u2022 Integrated Grad-CAM explainability and deployed the end-to-end inference system on Streamlit Cloud for real-time clinical decision support.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            409.9,
+            554.1,
+            432.3
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "GenAI YouTube Video Summarization Chatbot LangChain, OpenAI GPT or Mixtral",
+      "description": "Extracted YouTube transcripts and built a LangChain NLP pipeline to generate concise, timestamped, multilingual summaries using",
+      "technologies": [
+        "Python",
+        "Streamlit"
+      ],
+      "confidence": 1.0,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          56
+        ],
+        "description_block_ids": [
+          58
+        ],
+        "technology_block_ids": [
+          56
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 56,
+          "text": "GenAI YouTube Video Summarization Chatbot LangChain, OpenAI GPT or Mixtral |SpeechRecognition |Streamlit |YouTube Transcript|python",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            436.2,
+            383.0,
+            458.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 58,
+          "text": "\u2022 Extracted YouTube transcripts and built a LangChain NLP pipeline to generate concise, timestamped, multilingual summaries using",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            457.2,
+            553.6,
+            469.1
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "LLMs.",
+      "description": "Integrated FAISS semantic embeddings for context-aware question answering over summarized video content. Added speech-to-text voice query support and deployed an interactive Streamlit app with multi-language output and exportable summaries. AWS Cloud Practitioner  \u2013 Foundational",
+      "technologies": [
+        "Aws",
+        "Streamlit"
+      ],
+      "confidence": 0.9,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          59
+        ],
+        "description_block_ids": [
+          60,
+          61,
+          63,
+          64,
+          65,
+          66,
+          67,
+          69,
+          70
+        ],
+        "technology_block_ids": [
+          61,
+          63
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 59,
+          "text": "LLMs (GPT / Mistral).",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": false,
+          "bbox": [
+            36.9,
+            467.7,
+            116.7,
+            479.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 60,
+          "text": "\u2022 Integrated FAISS semantic embeddings for context-aware question answering over summarized video content.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            478.2,
+            471.4,
+            490.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 61,
+          "text": "\u2022 Added speech-to-text voice query support and deployed an interactive Streamlit app with multi-language output and exportable summaries.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            488.7,
+            544.1,
+            511.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 63,
+          "text": "AWS Cloud Practitioner  \u2013 Foundational",
+          "block_type": "DESCRIPTION",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            620.7,
+            186.7,
+            632.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 64,
+          "text": "AICTE Virtual Internship -  Networking",
+          "block_type": "DESCRIPTION",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            214.2,
+            620.7,
+            369.2,
+            632.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 65,
+          "text": "(Zscaler) | Google Android Developer",
+          "block_type": "DESCRIPTION",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": false,
+          "bbox": [
+            214.2,
+            631.2,
+            358.5,
+            643.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 66,
+          "text": "\" Intelligent Faculty Hiring System \"  \u2014  Indian Patent Office  |  Application No: 202541025676                                                                   28/2/2025",
+          "block_type": "DESCRIPTION",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            684.4,
+            562.2,
+            696.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 67,
+          "text": "Competitive Programming  - Solved 550+ problems on LeetCode, maintaining a contest rating of 1600+ Successfully qualified GATE 2026,  showcasing strong analytical and technical aptitude.",
+          "block_type": "DESCRIPTION",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            721.2,
+            435.6,
+            748.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 69,
+          "text": "\u2022 Volunteered in, leading social initiatives like environmental cleaning and community awareness programs in NSS.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            774.4,
+            483.4,
+            786.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 70,
+          "text": "\u2022 Organized paper presentation event at a national-level technical symposium, planning , scheduling, and participant management.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            784.9,
+            549.3,
+            796.8
+          ],
+          "page": 0
+        }
+      ]
+    }
+  ],
+  "education": "B.Tech Artificial Intelligence and Data Science,  Chennai Institute Of Technology\n2023 \u2013 2027  | Chennai, India\nCGPA - 8.4\nResearch Intern At,  CHENNAI INSTITUTE OF TECHNOLOGY\n06/2025 \u2013 07/2025  | Chennai,India\n\u2022 Built a MobileNetV2-based telemedicine system achieving 98% pneumonia accuracy and 91.2",
+  "layout_metadata": {
+    "engine": "PyMuPDF",
+    "pdf_type": "text_based",
+    "is_complex_layout": false,
+    "has_encoding_issues": false,
+    "pages_with_columns": [],
+    "pages_with_tables": [],
+    "inspector_latency_ms": 0
+  },
+  "raw_text": "HARI KRISHNAN S\nharikrishnan451811@gmail.com\n8124063917\nEducation\nProfessional Experience\nProjects\nSkills\nProgramming Languages:  Python, C , C++.\nTech stacks:  FastAPI, Streamlit, HTML, CSS , ReactJS, n8n.\nCloud & DevOps:  AWS (S3, Lambda, Cloud Deployment),\nStreamlit Cloud, Google Colab (GPU), Google Drive API\nCertificates\nPublications\nAchievements\nVolunteering\ngithub.com/Harikrishnan76\n06/2026 \u2013 07/2026\n06/2025 \u2013 07/2025\n04/2025 \u2013 05/2025\nMachine Learning & AI:  TensorFlow, Scikit-learn, YOLO, OpenCV,\nBERT, MobileNetV2 , Pytorch , Jupyter Notebooks, Edge profiling.\nDatabases:  MySQL, MongoDB, PostgreSQL\nTools & Platforms:  Git, GitHub, Tkinter, Figma\nCisco  \u2013 Introduction to Modern AI |\nIntroduction to Data science |  Python essentials 1 &2 |  CyberOps| CCNA 1,2,3\nlinkedin.com/in/harikrishnan434\nB.Tech Artificial Intelligence and Data Science,  Chennai Institute Of Technology\n2023 \u2013 2027  | Chennai, India\nCGPA - 8.4\nResearch Intern At,  CHENNAI INSTITUTE OF TECHNOLOGY\n06/2025 \u2013 07/2025  | Chennai,India\n\u2022 Built a MobileNetV2-based telemedicine system achieving 98% pneumonia accuracy and 91.2% skin cancer accuracy.\n\u2022 Implemented Grad-CAM explainability, improving model transparency and user trust.\n\u2022 Deployed models on Streamlit Cloud with 3.8s optimized inference latency.\n\u2022 Resolved TensorFlow deployment issues and enabled Google Drive-based model hosting.\nArtificial Intelligence Fullstack Development Intern at,  ICONIX SOFTWARE SOLUTIONS\n11/2024 \u2013 12/2024  | Tirunelveli, India\n\u2022 Developed a secure file management system using AES encryption to protect data and mitigate Sybil attacks.\n\u2022 Built a Tkinter-based desktop application for secure encrypted file storage and access control.\n\u2022 Implemented an ML-based blockchain attack detection model to ensure data integrity through intelligent threat detection.\nDevConnect - FullStack Developer Networking Platform React,TypeScript,Vite,Tailwind CSS,Node.js,Express.js,JWT Authentication,PostgreSQL ,Prisma ORM ,Redis (Caching)\n\u2022 Developed a full-stack developer networking platform with secure authentication, developer profiles, social feeds, GitHub integration, and an automated resume builder.\n\u2022 Implemented real-time messaging, notifications, follow/unfollow functionality, skill endorsements, and role-based access control to enhance user collaboration.\n\u2022 Designed scalable RESTful APIs and a responsive, production-ready architecture with optimized data management and secure file handling.\nTelemedicine Application for Automated Detection of Pediatric Pneumonia and Skin Cancer Python |Open CV| TensorFlow 2.15.0 | Google Colab | Streamlit.\n\u2022 Built an AI-powered telemedicine application using MobileNetV2 transfer learning, achieving 96.7% recall (pneumonia) and 91.2% classification accuracy (skin cancer) and provides suggestions.\n\u2022 Performed image preprocessing, data augmentation, and GPU-accelerated training on Google Colab to boost model generalization.\n\u2022 Integrated Grad-CAM explainability and deployed the end-to-end inference system on Streamlit Cloud for real-time clinical decision support.\nGenAI YouTube Video Summarization Chatbot LangChain, OpenAI GPT or Mixtral |SpeechRecognition |Streamlit |YouTube Transcript|python\n\u2022 Extracted YouTube transcripts and built a LangChain NLP pipeline to generate concise, timestamped, multilingual summaries using\nLLMs (GPT / Mistral).\n\u2022 Integrated FAISS semantic embeddings for context-aware question answering over summarized video content.\n\u2022 Added speech-to-text voice query support and deployed an interactive Streamlit app with multi-language output and exportable summaries.\nAWS Cloud Practitioner  \u2013 Foundational\nAICTE Virtual Internship -  Networking\n(Zscaler) | Google Android Developer\n\" Intelligent Faculty Hiring System \"  \u2014  Indian Patent Office  |  Application No: 202541025676                                                                   28/2/2025\nCompetitive Programming  - Solved 550+ problems on LeetCode, maintaining a contest rating of 1600+ Successfully qualified GATE 2026,  showcasing strong analytical and technical aptitude.\n\u2022 Volunteered in, leading social initiatives like environmental cleaning and community awareness programs in NSS.\n\u2022 Organized paper presentation event at a national-level technical symposium, planning , scheduling, and participant management.",
+  "parse_time_ms": 43.7
+}

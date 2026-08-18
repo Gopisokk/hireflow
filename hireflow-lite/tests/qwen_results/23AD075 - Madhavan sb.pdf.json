@@ -1,0 +1,178 @@
+{
+  "candidate": {
+    "candidate_name": "Madhavan S B",
+    "email": "madhavansb133@gmail.com",
+    "phone": "+91-9363549651",
+    "github_url": "Github",
+    "linkedin_url": "Linkedin"
+  },
+  "education": [
+    {
+      "institution": "Chennai Institute of Technology",
+      "degree": "B.Tech Artificial Intelligence and Data Science",
+      "field": null,
+      "cgpa": null,
+      "start_date": "2023",
+      "end_date": "2027"
+    }
+  ],
+  "experience": [
+    {
+      "organization": "UG Researcher \u2013 AI & Computer Vision",
+      "role": null,
+      "type": "employment",
+      "description": [],
+      "technologies": [],
+      "start_date": "Nov 2024",
+      "end_date": "Dec 2024",
+      "source_lines": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "project_name": "RAG-Analyzer",
+      "description": "Built an end-to-end Retrieval-Augmented Generation (RAG) application for intelligent document querying. Implemented semantic search using SentenceTransformers embeddings and FAISS vector indexing. Integrated Groq LLM with a Flask backend to generate context-aware responses with reduced hallucinations.",
+      "technologies": [
+        "Python",
+        "Flask",
+        "FAISS",
+        "SentenceTransformers",
+        "Groq API",
+        "Hugging Face"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Text-to-Image Generator",
+      "description": "Built a text-to-image generation pipeline using Stable Diffusion (Dreamlike Diffusion, SDXL) with GPU-accelerated inference. Implemented prompt-based image synthesis using Hugging Face Diffusers and Transformers. Enabled image visualization, saving, and download using Matplotlib.",
+      "technologies": [],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        32,
+        33,
+        34,
+        35,
+        36
+      ],
+      "confidence": "Low"
+    },
+    {
+      "project_name": "ScopeIt",
+      "description": "Built a cross-platform mobile app aggregating competition data with search and category filtering options. Built a cross-platform application for students and entrepreneurs to create, organize, and manage competitions, events, and hackathons.",
+      "technologies": [],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        37,
+        38,
+        39,
+        40
+      ],
+      "confidence": "Low"
+    },
+    {
+      "project_name": "Math Solver (Android)",
+      "description": "Developed an Android app to solve handwritten mathematical expressions using AI models. Implemented real-time camera capture, preprocessing, and expression recognition for accurate solutions. Designed a student-friendly interface for quick input, solution display, and step-by-step guidance.",
+      "technologies": [],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        41,
+        42,
+        43,
+        44
+      ],
+      "confidence": "Low"
+    }
+  ],
+  "skills": {
+    "programming_languages": [
+      "C++",
+      "Java",
+      "Python",
+      "MySQL",
+      "PostgreSQL",
+      "HTML",
+      "CSS",
+      "JavaScript"
+    ],
+    "frameworks": [],
+    "libraries": [],
+    "databases": [
+      "MySQL",
+      "PostgreSQL"
+    ],
+    "cloud": [],
+    "tools": [
+      "GitHub",
+      "Linux",
+      "Postman",
+      "Colab",
+      "Cursor",
+      "Antigravity",
+      "VS Code"
+    ],
+    "other": [
+      "Machine Learning",
+      "RAG",
+      "LangGraph",
+      "PyTorch",
+      "Spring Boot",
+      "Flutter",
+      "Numpy",
+      "Pandas",
+      "React JS",
+      "Node JS"
+    ]
+  },
+  "certifications": [
+    "Coursera: Data Structures & Algorithms | Algorithms on String",
+    "Cisco: Python Essential 1 | Introduction to Networks | Introduction to Cybersecurity | Cybersecurity Essentials",
+    "NPTEL: Introduction to Database System"
+  ],
+  "achievements": [
+    "Qualified GATE 2026 (Data Science & AI) with AIR 8646 and a score of 365",
+    "Secured Rank 5790 in TCS CodeVita Season 13 (Round 2)",
+    "Achieved Global Rank 5796 in Meta Hacker Cup among 13,000+ participants"
+  ],
+  "competitive_programming": [
+    "LeetCode: Max Rating 1815 | Solved 950+ | Top 8.81% globally | Badges: 7 | Highest Rank: 3457",
+    "Codeforces: Max Rating 1115 | Position: Newbie | Solved 250+ | Highest Rank: 5572 in Round 1011 Div 2",
+    "CodeChef: Max Rating 1540 | Position: 2-Star | Solved 280+ | Highest Rank: 1195 in Starter 184 Div 3"
+  ],
+  "volunteering": [
+    "Organizer \u2013 T.A.L.O.S 4.0 (2025) \u2013 Organized a National Level Technical Symposium"
+  ],
+  "status": "needs_review",
+  "validation_errors": [
+    "Low confidence project extraction for 'Text-to-Image Generator' (weak evidence match)",
+    "Low confidence project extraction for 'ScopeIt' (weak evidence match)",
+    "Low confidence project extraction for 'Math Solver (Android)' (weak evidence match)"
+  ],
+  "parser_metadata": {
+    "model": "qwen2.5:3b-instruct",
+    "latency_ms": 30260.18,
+    "engine": "Ollama-API"
+  }
+}

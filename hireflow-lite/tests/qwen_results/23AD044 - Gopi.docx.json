@@ -1,0 +1,140 @@
+{
+  "candidate": {
+    "candidate_name": "GOPI R K",
+    "email": "gopi030506@gmail.com",
+    "phone": "9345869720",
+    "github_url": "github.com/Gopisokk",
+    "linkedin_url": "linkedin.com/in/gopirk"
+  },
+  "education": [
+    {
+      "institution": "Chennai Institute of Technology, Chennai",
+      "degree": "Bachelor of Technology in Computer Science and Engineering (AI & DS)",
+      "field": null,
+      "cgpa": null,
+      "start_date": "Sep 2023",
+      "end_date": "June 2027"
+    }
+  ],
+  "experience": [],
+  "projects": [
+    {
+      "project_name": "HireFlow",
+      "description": "Built an AI-driven recruitment platform that parses PDF/DOCX resumes, extracts candidate skills/projects, and ranks applicants using hybrid ATS scoring combining BM25 keyword retrieval and Sentence-Transformer semantic matching. Developed a GitHub verification engine leveraging GraphQL APIs to evaluate repository authenticity, coding activity, technology alignment, and project credibility through configurable multi-factor candidate assessment. Generated explainable hiring reports with ATS score, GitHub score, matched/missing skills, and final candidate rankings, enabling recruiters to shortlist applicants faster and with higher confidence.",
+      "technologies": [
+        "Python",
+        "FastAPI",
+        "Sentence Transformers",
+        "BM25",
+        "GitHub GraphQL",
+        "NLP"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        13
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "AgentNexus",
+      "description": "Developed a non-custodial wallet SDK enabling autonomous AI agents to securely manage digital assets, sign transactions, and interact with blockchain networks through a unified abstraction layer. Implemented programmable payment workflows using x402-based agent-to-agent transactions, spend controls, and policy-driven authorization mechanisms for automated service payments. Built a modular multi-chain architecture supporting wallet management, transaction monitoring, and developer-friendly APIs for integrating payment capabilities into agentic AI applications.",
+      "technologies": [
+        "x402 Payments"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        16,
+        17
+      ],
+      "confidence": "Low"
+    },
+    {
+      "project_name": "BacklogBridge MCP",
+      "description": "Architected a high-performance Model Context Protocol (MCP) server in Rust to bridge autonomous AI agents with project management APIs, enabling seamless automation of issue tracking, Git workflows, and documentation. Engineered a modular toolkit of 36+ asynchronous tools with granular feature-flag controls, allowing AI clients to securely execute read/write operations across pull requests, wikis, and shared files without compromising system integrity. Implemented a standardized category_resource_action naming convention and strict stateless routing to optimize tool discovery and context filtering, significantly reducing token overhead for LLMs managing the software development lifecycle.",
+      "technologies": [
+        "Rust",
+        "Model Context Protocol",
+        "Tokio",
+        "Serde"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        14,
+        15,
+        18
+      ],
+      "confidence": "High"
+    }
+  ],
+  "skills": {
+    "programming_languages": [
+      "Python",
+      "Rust",
+      "c++",
+      "FastAPI",
+      "GenAI",
+      "LangChain",
+      "MCP",
+      "Next.js",
+      "TypeScript",
+      "Web3/EVM",
+      "x402 Protocol",
+      "GraphQL",
+      "DSA"
+    ],
+    "frameworks": [
+      "React + Vite",
+      "REST APIs"
+    ],
+    "libraries": [
+      "OpenCV",
+      "Tensorflow"
+    ],
+    "databases": [
+      "Mysql",
+      "Mongo DB"
+    ],
+    "cloud": [
+      "AWS"
+    ],
+    "tools": [
+      "QLite-vec",
+      "Sentence-Transformers",
+      "Docker"
+    ],
+    "other": []
+  },
+  "certifications": [
+    "AWS Certified Cloud Practitioner (CLF-C02)",
+    "Cisco \u2013 Introduction to Cybersecurity",
+    "Cisco \u2013 Cybersecurity Essentials",
+    "Coursera \u2013 Data Structure",
+    "Coursera \u2013 Algorithms on Strings",
+    "Coursera \u2013 Algorithms on Graph"
+  ],
+  "achievements": [
+    "Amazon ML Challenge 2025 Rank -2015/210000 Teams (Top ~10%)"
+  ],
+  "competitive_programming": [
+    "LeetCode: (Gopi11356) Top 25% Globally, Solved 500+ problems, Max Rating 1500+",
+    "CodeChef: (gopirkaids2023) 2-star Div 4, Max Rating 1400+"
+  ],
+  "volunteering": [
+    "CIT Takshashila 2024 (College Cultural Event): Conducted an online photography event"
+  ],
+  "status": "needs_review",
+  "validation_errors": [
+    "Low confidence project extraction for 'AgentNexus' (weak evidence match)"
+  ],
+  "parser_metadata": {
+    "model": "qwen2.5:3b-instruct",
+    "latency_ms": 110902.48,
+    "engine": "Ollama-API"
+  }
+}

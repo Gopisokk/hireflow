@@ -1,0 +1,825 @@
+{
+  "name": "HARI SUDARSHAN N",
+  "email": "harisudarshan1803@gmail.com",
+  "github_username": "",
+  "phone": "+91 9361704172",
+  "skills": [
+    "Aws",
+    "Express",
+    "Fastapi",
+    "Firebase",
+    "Git",
+    "Java",
+    "Mongodb",
+    "Mysql",
+    "Node.Js",
+    "Opencv",
+    "Postgresql",
+    "Python",
+    "Pytorch",
+    "React",
+    "Rest Apis",
+    "Scikit-Learn",
+    "Tensorflow",
+    "Vector Db"
+  ],
+  "projects": [
+    {
+      "name": "Museum Ticket Booking Chatbot,  Python, Regex, JSON, Razorpay API",
+      "description": "Museum Ticket Booking Chatbot,  Python, Regex, JSON, Razorpay API",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          8
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 8,
+          "text": "Museum Ticket Booking Chatbot,  Python, Regex, JSON, Razorpay API",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            360.4,
+            306.5,
+            372.3
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Mini Ecommerce Website,  React.js, Node.js, Express.js, REST APIs",
+      "description": "Mini Ecommerce Website,  React.js, Node.js, Express.js, REST APIs",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          9
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 9,
+          "text": "Mini Ecommerce Website,  React.js, Node.js, Express.js, REST APIs",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            418.2,
+            288.9,
+            430.1
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "AI / Computer Vision",
+      "description": "CERTIFICATIONS AWS Cloud Practitioner Essentails",
+      "technologies": [
+        "Aws",
+        "Firebase",
+        "Mongodb",
+        "Mysql",
+        "Opencv",
+        "Postgresql",
+        "Pytorch",
+        "Vector Db"
+      ],
+      "confidence": 1.0,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          12
+        ],
+        "description_block_ids": [
+          14
+        ],
+        "technology_block_ids": [
+          12,
+          14
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 12,
+          "text": "AI / Computer Vision  \u2014 OpenCV | PyTorch | RAG | CNN | Image Processing Databases  \u2014 MySQL | MongoDB | PostgreSQL | Firebase | Vector DB",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            517.9,
+            315.5,
+            544.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 14,
+          "text": "CERTIFICATIONS AWS Cloud Practitioner Essentails",
+          "block_type": "DESCRIPTION",
+          "font_size": 10.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            568.7,
+            169.2,
+            598.1
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "(Amazon Web Services)",
+      "description": "(Amazon Web Services)",
+      "technologies": [],
+      "confidence": 0.45,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          16
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 16,
+          "text": "(Amazon Web Services)",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            596.7,
+            120.3,
+            608.6
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Database Management System",
+      "description": "Database Management System",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          17
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 17,
+          "text": "Database Management System",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            615.4,
+            156.3,
+            627.3
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "COMPETITIVE PROGRAMMING",
+      "description": "COMPETITIVE PROGRAMMING",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          19
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 19,
+          "text": "COMPETITIVE PROGRAMMING",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 10.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            46.2,
+            645.9,
+            190.8,
+            659.1
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Introduction to Data Science",
+      "description": "Introduction to Data Science",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          31
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 31,
+          "text": "Introduction to Data Science",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            400.1,
+            586.2,
+            518.5,
+            598.1
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Algorithmic Toolbox",
+      "description": "Algorithmic Toolbox",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          33
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 33,
+          "text": "Algorithmic Toolbox",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            400.1,
+            615.4,
+            484.1,
+            627.3
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "(UC San Diego)",
+      "description": "CGPA- 8.9/10 9/2023 \u2013 Present Underwent practical training in nuclear facility operations and safety protocols, gaining exposure to real- time industrial systems and instrumentation",
+      "technologies": [
+        "Express",
+        "Mongodb",
+        "Node.Js",
+        "React"
+      ],
+      "confidence": 0.9,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          34
+        ],
+        "description_block_ids": [
+          35,
+          36,
+          37,
+          39,
+          40,
+          42,
+          44,
+          45,
+          47,
+          49,
+          50,
+          52,
+          54
+        ],
+        "technology_block_ids": [
+          55
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 34,
+          "text": "(UC San Diego)",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": false,
+          "bbox": [
+            400.1,
+            625.9,
+            458.8,
+            637.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 35,
+          "text": "\u2022 CGPA- 8.9/10",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            100.2,
+            87.3,
+            112.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 36,
+          "text": "09/2023 \u2013 Present",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            496.6,
+            89.7,
+            566.9,
+            101.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 37,
+          "text": "\u2022 Underwent practical training in nuclear facility operations and safety protocols, gaining exposure to real- time industrial systems and instrumentation",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            148.9,
+            448.2,
+            171.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 39,
+          "text": "\u2022 Studied power generation, radiation safety, and control systems used in atomic energy production.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            169.9,
+            425.8,
+            181.8
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 40,
+          "text": "\u2022 Conducted research over two months and completed two papers on quantum machine learning and data integrity.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            196.2,
+            452.9,
+            218.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 42,
+          "text": "\u2022 Authored a review paper on Quantum Machine Learning Meets Anomaly Detection and a research paper on File Verification using Merkle Trees.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            217.2,
+            446.5,
+            239.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 44,
+          "text": "\u2022 Developed a CNN-based real-time system for hands-free media control using gesture recognition techniques.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            276.4,
+            465.0,
+            288.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 45,
+          "text": "\u2022 Achieved ~90% accuracy through model and preprocessing optimization, ensuring reliable real-time performance and smooth user experience.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            286.9,
+            553.7,
+            309.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 47,
+          "text": "\u2022 Built a multi-agent AI system to generate personalized travel      itineraries by analyzing user preferences, budget, duration, and trip constraints.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            28.3,
+            323.7,
+            548.5,
+            346.1
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 49,
+          "text": "\u2022 Implemented agent orchestration with vector-based retrieval to deliver context-aware, accurate, and travel recommendations.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            28.3,
+            344.7,
+            530.0,
+            356.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 50,
+          "text": "\u2022 Developed a rule-based chatbot for museum ticket booking, allowing users to view details, check availability, and generate booking confirmations.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            370.9,
+            556.0,
+            393.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 52,
+          "text": "\u2022 Implemented date validation, availability checks, booking reference generation, and integrated Razorpay for secure and seamless payments.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            391.9,
+            548.1,
+            414.3
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 54,
+          "text": "\u2022 Developed a full-stack e-commerce platform with product catalog, cart, and checkout features using the MERN stack.",
+          "block_type": "BULLET",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            428.7,
+            496.4,
+            440.6
+          ],
+          "page": 0
+        },
+        {
+          "block_id": 55,
+          "text": "\u2022 Built RESTful APIs with Node.js and Express.js and designed a responsive React frontend with dynamic routing, using MongoDB for data storage.",
+          "block_type": "TECHNOLOGY_LINE",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": true,
+          "bbox": [
+            36.9,
+            439.2,
+            551.2,
+            461.6
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Machine Learning",
+      "description": "Machine Learning  \u2014 Supervised & Unsupervised Learning | Data Preprocessing | Scikit-learn | TensorFlow",
+      "technologies": [
+        "Tensorflow"
+      ],
+      "confidence": 0.75,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          57
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": [
+          57
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 57,
+          "text": "Machine Learning  \u2014 Supervised & Unsupervised Learning | Data Preprocessing | Scikit-learn | TensorFlow",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            502.9,
+            444.1,
+            514.8
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Miscellaneous",
+      "description": "Miscellaneous  \u2014 LangChain | Git & GitHub | Technical Writing | Web Scraping | Prompt Engineering",
+      "technologies": [
+        "Git"
+      ],
+      "confidence": 0.75,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          58
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": [
+          58
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 58,
+          "text": "Miscellaneous  \u2014 LangChain | Git & GitHub | Technical Writing | Web Scraping | Prompt Engineering",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            548.7,
+            415.7,
+            560.6
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Salesforce Agentforce Specialist",
+      "description": "Salesforce Agentforce Specialist",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          59
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 59,
+          "text": "Salesforce Agentforce Specialist",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            214.2,
+            586.2,
+            347.5,
+            598.1
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "(Salesforce)",
+      "description": "(Salesforce)",
+      "technologies": [],
+      "confidence": 0.45,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          60
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 60,
+          "text": "(Salesforce)",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": false,
+          "is_bullet": false,
+          "bbox": [
+            214.2,
+            596.7,
+            260.8,
+            608.6
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Python Essentials 1",
+      "description": "Python Essentials 1",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          61
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 61,
+          "text": "Python Essentials 1",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            214.2,
+            615.4,
+            295.5,
+            627.3
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Controlling a Media Player using Hand Gestures in CNN,  Python, OpenCV, Tensorflow, Pytorch,  MediaPipe",
+      "description": "Controlling a Media Player using Hand Gestures in CNN,  Python, OpenCV, Tensorflow, Pytorch,  MediaPipe",
+      "technologies": [],
+      "confidence": 0.55,
+      "status": "uncertain_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          73
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": []
+      },
+      "source_blocks": [
+        {
+          "block_id": 73,
+          "text": "Controlling a Media Player using Hand Gestures in CNN,  Python, OpenCV, Tensorflow, Pytorch,  MediaPipe",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            265.9,
+            455.3,
+            277.8
+          ],
+          "page": 0
+        }
+      ]
+    },
+    {
+      "name": "Trip Planner using Multi",
+      "description": "Trip Planner using Multi-AI Agents,  Python, LangChain, OpenAI, FastAPI, Vector Database",
+      "technologies": [
+        "Fastapi",
+        "Python"
+      ],
+      "confidence": 0.75,
+      "status": "verified_extraction",
+      "extraction_method": "block_classified_layout",
+      "evidence": {
+        "name_block_ids": [
+          74
+        ],
+        "description_block_ids": [],
+        "technology_block_ids": [
+          74
+        ]
+      },
+      "source_blocks": [
+        {
+          "block_id": 74,
+          "text": "Trip Planner using Multi-AI Agents,  Python, LangChain, OpenAI, FastAPI, Vector Database",
+          "block_type": "PROJECT_TITLE",
+          "font_size": 9.5,
+          "is_bold": true,
+          "is_bullet": false,
+          "bbox": [
+            28.3,
+            313.2,
+            384.7,
+            325.1
+          ],
+          "page": 0
+        }
+      ]
+    }
+  ],
+  "education": "B.Tech) - Artificial Intelligence and Data Science (AI & DS),  Chennai Institute of Technology\nControlling a Media Player using Hand Gestures in CNN,  Python, OpenCV, Tensorflow, Pytorch,  MediaPipe\nTrip Planner using Multi-AI Agents,  Python, LangChain, OpenAI, FastAPI, Vector Database",
+  "layout_metadata": {
+    "engine": "PyMuPDF",
+    "pdf_type": "text_based",
+    "is_complex_layout": false,
+    "has_encoding_issues": false,
+    "pages_with_columns": [],
+    "pages_with_tables": [],
+    "inspector_latency_ms": 0
+  },
+  "raw_text": "HARI SUDARSHAN N\nharisudarshan1803@gmail.com\n+91 9361704172\nEDUCATION\nINTERNSHIP EXPERIENCE Inplant Trainee,  Madras Atomic Power Station (MAPS)\nResearch Intern,  Chennai Institute of Technology\nPROJECTS\nMuseum Ticket Booking Chatbot,  Python, Regex, JSON, Razorpay API\nMini Ecommerce Website,  React.js, Node.js, Express.js, REST APIs\nSKILLS Programming Languages  \u2014 C | C++ | Python | Java | SQL\nAI / Computer Vision  \u2014 OpenCV | PyTorch | RAG | CNN | Image Processing Databases  \u2014 MySQL | MongoDB | PostgreSQL | Firebase | Vector DB\nCERTIFICATIONS AWS Cloud Practitioner Essentails\n(Amazon Web Services)\nDatabase Management System\n(NPTEL, Ministry of Education)\nCOMPETITIVE PROGRAMMING\nACHIEVEMENTS\nVOLUNTEERING Talos Sponsorship, Chennai Institute of technology\nChennai, India\nHariSudarshan\nHariSudarshan\nChennai, India\n06/2025\nKalpakkam, India\n11/2024 \u2013 12/2024\nChennai, India\nIntroduction to Data Science\n(Cisco, Networking Academy)\nAlgorithmic Toolbox\n(UC San Diego)\n\u2022 CGPA- 8.9/10\n09/2023 \u2013 Present\n\u2022 Underwent practical training in nuclear facility operations and safety protocols, gaining exposure to real- time industrial systems and instrumentation\n\u2022 Studied power generation, radiation safety, and control systems used in atomic energy production.\n\u2022 Conducted research over two months and completed two papers on quantum machine learning and data integrity.\n\u2022 Authored a review paper on Quantum Machine Learning Meets Anomaly Detection and a research paper on File Verification using Merkle Trees.\n\u2022 Developed a CNN-based real-time system for hands-free media control using gesture recognition techniques.\n\u2022 Achieved ~90% accuracy through model and preprocessing optimization, ensuring reliable real-time performance and smooth user experience.\n\u2022 Built a multi-agent AI system to generate personalized travel      itineraries by analyzing user preferences, budget, duration, and trip constraints.\n\u2022 Implemented agent orchestration with vector-based retrieval to deliver context-aware, accurate, and travel recommendations.\n\u2022 Developed a rule-based chatbot for museum ticket booking, allowing users to view details, check availability, and generate booking confirmations.\n\u2022 Implemented date validation, availability checks, booking reference generation, and integrated Razorpay for secure and seamless payments.\n\u2022 Developed a full-stack e-commerce platform with product catalog, cart, and checkout features using the MERN stack.\n\u2022 Built RESTful APIs with Node.js and Express.js and designed a responsive React frontend with dynamic routing, using MongoDB for data storage.\nMachine Learning  \u2014 Supervised & Unsupervised Learning | Data Preprocessing | Scikit-learn | TensorFlow\nMiscellaneous  \u2014 LangChain | Git & GitHub | Technical Writing | Web Scraping | Prompt Engineering\nSalesforce Agentforce Specialist\n(Salesforce)\nPython Essentials 1\n(Cisco, Networking Academy)\nLeetcode : (HariSudarshan) Top 17.81% Globally, Solved 800+ problems, Max Rating 1732, Badges 8, Daily Streak 50+ days\u2060 Codechef  : (hari_sudarshan) Div 1, One Star, Max Rating 1384, Best Contest Rank: 3793\u2060 Codeforces  : (Hari_Sudarshan) Newbie, Max Rating 880, Best Contest Rank: 12816\u2060\nShortlisted among the  top 50 teams  from the college for Smart India Hackathon 2025\n09/2025\nAchieved an  All India Rank of 3223  in Round 2 of TCS CodeVita Season 13.\n10/2025\n\u2022 Assisted in securing sponsorships and managing partnerships for department events.\n02/2025\n(B.Tech) - Artificial Intelligence and Data Science (AI & DS),  Chennai Institute of Technology\nControlling a Media Player using Hand Gestures in CNN,  Python, OpenCV, Tensorflow, Pytorch,  MediaPipe\nTrip Planner using Multi-AI Agents,  Python, LangChain, OpenAI, FastAPI, Vector Database",
+  "parse_time_ms": 15.2
+}

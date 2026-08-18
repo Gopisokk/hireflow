@@ -1,0 +1,199 @@
+{
+  "candidate": {
+    "candidate_name": "LINNGESHWAR B",
+    "email": "lingaeshrajan@gmail.com",
+    "phone": "+91 9042298605",
+    "github_url": "linngeshwar.engineer",
+    "linkedin_url": "linngeshwar.engineer"
+  },
+  "education": [
+    {
+      "institution": null,
+      "degree": "B.E. Computer Science and Engineering (Cyber Security)",
+      "field": null,
+      "cgpa": null,
+      "start_date": "2023",
+      "end_date": "2027"
+    }
+  ],
+  "experience": [
+    {
+      "organization": null,
+      "role": "Software Development Intern",
+      "type": "employment",
+      "description": [],
+      "technologies": [],
+      "start_date": "Nov 2024",
+      "end_date": "Jan 2025",
+      "source_lines": [
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ]
+    },
+    {
+      "organization": null,
+      "role": "RPA Developer Intern",
+      "type": "employment",
+      "description": [],
+      "technologies": [],
+      "start_date": "May 2024",
+      "end_date": "Jun 2024",
+      "source_lines": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "project_name": "Revil Symposium \u2014 Full-Stack Event Management Platform",
+      "description": "Architected and led development of a full-stack platform that handled 1,000+ event registrations end-to-end, from sign-up through on-site check-in and certificate issuance.",
+      "technologies": [
+        "Next.js",
+        "Node.js",
+        "Express.js",
+        "PostgreSQL",
+        "Tailwind CSS"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Interactive Personal Portfolio",
+      "description": "Developed a fully responsive, component-driven portfolio using Next.js App Router with dynamic routing and server-side rendering, achieving fast load times and high Lighthouse performance scores.",
+      "technologies": [
+        "Next.js 14",
+        "Framer Motion",
+        "Tailwind CSS",
+        "Vercel"
+      ],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65
+      ],
+      "confidence": "High"
+    },
+    {
+      "project_name": "Automated Penetration Testing | Pentesting-tool",
+      "description": "Engineered a modular penetration testing tool to automate the detection of common web application vulnerabilities, including SQL injection and Cross-Site Scripting (XSS).",
+      "technologies": [],
+      "start_date": null,
+      "end_date": null,
+      "url": null,
+      "source_lines": [
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+      ],
+      "confidence": "High"
+    }
+  ],
+  "skills": {
+    "programming_languages": [
+      "C++",
+      "JavaScript",
+      "TypeScript",
+      "Python",
+      "SQL"
+    ],
+    "frameworks": [
+      "React",
+      "Next.js",
+      "Node.js",
+      "Express.js",
+      "Django"
+    ],
+    "libraries": [
+      "Tailwind CSS",
+      "Framer Motion"
+    ],
+    "databases": [
+      "PostgreSQL",
+      "MongoDB",
+      "MySQL"
+    ],
+    "cloud": [
+      "AWS",
+      "ServiceNow",
+      "Automation 360"
+    ],
+    "tools": [
+      "Git",
+      "Wireshark",
+      "Nmap",
+      "Docker",
+      "Automation 360",
+      "Bot Developer",
+      "Business Analyst"
+    ],
+    "other": [
+      "Tailwind CSS",
+      "Vercel"
+    ]
+  },
+  "certifications": [
+    "AWS: Cloud Practitioner",
+    "Cisco: Networking Essentials, Cybersecurity Essentials, Introduction to Cybersecurity, CCNA 1,2,3",
+    "Python Essentials 1,2",
+    "ServiceNow: CAD, CSA",
+    "Automation 360: Bot Developer, Business Analyst",
+    "NPTEL: Cloud Computing, DBMS, Human Computer Interaction, Data Analytics",
+    "Coursera: Tools of Trade, Connect and Protect"
+  ],
+  "achievements": [
+    "JPMorgan Chase Code for Good Hackathon 2025 \u2013 Runner-Up",
+    "Intra-Collegiate Code-a-Thon Finalist (2023 & 2024)",
+    "Vice President, College Technical Club (2025)"
+  ],
+  "competitive_programming": [],
+  "volunteering": [],
+  "status": "valid",
+  "parser_metadata": {
+    "model": "qwen2.5:3b-instruct",
+    "latency_ms": 29899.21,
+    "engine": "Ollama-API"
+  }
+}

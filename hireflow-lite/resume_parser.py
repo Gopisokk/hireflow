@@ -109,6 +109,7 @@ class LineInfo:
         # Check if bullet point (including middle dot \u00b7)
         self.is_bullet = bool(re.match(r"^[•\-\*\u2022\u00b7\u25cf\u25cb\u2023\u25aa\u25b8\d+\.]\s*", self.text))
         self.block_type: str = "UNKNOWN"
+        self.section_context: str = "UNKNOWN"
 
     def to_dict(self) -> dict:
         return {
@@ -316,6 +317,121 @@ def _extract_docx_structured(filepath: str) -> Tuple[List[LineInfo], float, dict
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  Line Reconstruction & Section Segmentation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _reconstruct_lines(lines: List[LineInfo]) -> List[LineInfo]:
+    """Merge visual line continuations (e.g. wrapped lines) based on spatial and typographic proximity."""
+    if not lines:
+        return []
+
+    reconstructed: List[LineInfo] = [lines[0]]
+    for curr in lines[1:]:
+        prev = reconstructed[-1]
+        
+        # Check if they are on the same page
+        if curr.page != prev.page:
+            reconstructed.append(curr)
+            continue
+            
+        # A new bullet point ALWAYS starts a new line
+        if curr.is_bullet:
+            reconstructed.append(curr)
+            continue
+            
+        # Typography mismatch
+        if abs(prev.font_size - curr.font_size) > 1.0 or prev.is_bold != curr.is_bold:
+            reconstructed.append(curr)
+            continue
+            
+        merge = False
+        if prev.bbox and curr.bbox:
+            # Spatial heuristic: tighter Y gap for wrapped lines, slightly forgiving X alignment for bullets
+            x_align = abs(prev.bbox[0] - curr.bbox[0]) < 25.0
+            y_gap = curr.bbox[1] - prev.bbox[3]
+            
+            # Wrapped lines are typically very tight vertically
+            if x_align and -5.0 <= y_gap < 6.0:
+                # Do not merge if current line looks like a new heading/title (starts with upper and short)
+                if prev.is_bullet and curr.text[0].isupper() and len(curr.text) < 50:
+                    merge = False
+                else:
+                    merge = True
+        else:
+            # Fallback for DOCX (no bboxes): merge if previous line doesn't end with terminal punctuation
+            if not re.search(r"[.!?]\s*$", prev.text):
+                merge = True
+                
+        if merge:
+            # Merge curr into prev
+            prev.text = prev.text + " " + curr.text
+            prev.spans.extend(curr.spans)
+            if prev.bbox and curr.bbox:
+                prev.bbox = [
+                    min(prev.bbox[0], curr.bbox[0]),
+                    min(prev.bbox[1], curr.bbox[1]),
+                    max(prev.bbox[2], curr.bbox[2]),
+                    max(prev.bbox[3], curr.bbox[3])
+                ]
+            # If prev was not a bullet, but text now looks like one, don't change is_bullet (it inherits from prev)
+        else:
+            reconstructed.append(curr)
+
+    return reconstructed
+
+
+def _detect_sections(lines: List[LineInfo], median_font_size: float) -> List[LineInfo]:
+    """Assigns an overarching section_context to every line based on section headings."""
+    # First pass: identify section headings and store their page and Y-coordinate
+    headings = []
+    
+    for line in lines:
+        text_lower = line.text.lower().strip().rstrip(":-")
+        is_heading_size = line.font_size >= (median_font_size * 1.15)
+        is_short = len(line.text) < 45
+        
+        is_sec_heading = False
+        for stype, keywords in _SECTION_KEYWORDS.items():
+            if any(kw == text_lower or (is_short and text_lower.startswith(kw)) for kw in keywords):
+                if is_heading_size or line.is_bold or is_short:
+                    line.section_context = stype.upper()
+                    # Store heading: (page, y_coord, type)
+                    y_coord = line.bbox[1] if line.bbox else 0
+                    headings.append((line.page, y_coord, stype.upper()))
+                    is_sec_heading = True
+                    break
+        
+        if not is_sec_heading:
+            line.section_context = "UNKNOWN"
+
+    # Second pass: assign non-heading lines to the appropriate section based on Y-coordinate
+    for line in lines:
+        if line.section_context != "UNKNOWN":
+            continue
+            
+        page = line.page
+        y_coord = line.bbox[1] if line.bbox else 0
+        
+        # Find headings on the same page
+        page_headings = [(y, stype) for p, y, stype in headings if p == page]
+        
+        if not page_headings:
+            # Fallback to previous page's last heading if any, else HEADER
+            prev_headings = [stype for p, y, stype in headings if p < page]
+            line.section_context = prev_headings[-1] if prev_headings else "HEADER"
+            continue
+            
+        # Find the heading with the largest Y that is <= line's Y + 10 (small tolerance)
+        valid_headings = [stype for y, stype in page_headings if y <= y_coord + 10]
+        if valid_headings:
+            line.section_context = valid_headings[-1]
+        else:
+            line.section_context = "HEADER"
+        
+    return lines
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  Block Taxonomy & Classifier Pipeline
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -452,6 +568,11 @@ def _score_project_header_candidate(
     if line.block_id <= 2 and ("candidate" in text.lower() or _extract_email(text) or (next_line and _extract_email(next_line.text))):
         score -= 0.50
 
+    # Continuation Fragment Penalty (-0.60)
+    # If the line starts with a lowercase letter, it is almost certainly a continuation of a previous bullet
+    if text and text[0].islower():
+        score -= 0.60
+
     # Action Verb Bullet Penalty (-0.40)
     first_word = text.split()[0].lower().rstrip(".,:")
     if first_word in _ACTION_VERBS:
@@ -498,8 +619,25 @@ def _classify_blocks(
         if is_sec_heading:
             continue
 
-        # Check for standalone technology line
-        if re.search(r"^\s*(tech stack|technologies|built with|tools|stack|tech)\s*[:\-]", line.text, re.I):
+        # Check for project title candidate ONLY if we are in an eligible section
+        is_project_title = False
+        if line.section_context in ("PROJECTS", "EXPERIENCE"):
+            next_line = lines[i + 1] if i + 1 < num_lines else None
+            hscore = _score_project_header_candidate(line, next_line, median_font_size)
+            if hscore >= header_threshold:
+                line.block_type = "PROJECT_TITLE"
+                is_project_title = True
+                
+        if is_project_title:
+            continue
+
+        # Check for standalone technology line (pure tech list or explicit header)
+        text_no_punct = re.sub(r"[^\w\s]", " ", line.text).lower()
+        words = [w for w in text_no_punct.split() if len(w) > 1]
+        tech_matches = _TECH_REGEX.findall(line.text)
+        is_pure_tech = (len(words) > 0 and (len(tech_matches) >= min(2, len(words) // 2))) or re.search(r"^\s*(tech stack|technologies|built with|tools|stack|tech|skills)\s*[:\-]", line.text, re.I)
+        
+        if is_pure_tech:
             line.block_type = "TECHNOLOGY_LINE"
             continue
 
@@ -514,13 +652,6 @@ def _classify_blocks(
         # Check for bullet
         if line.is_bullet:
             line.block_type = "BULLET"
-            continue
-
-        # Check for project title candidate
-        next_line = lines[i + 1] if i + 1 < num_lines else None
-        hscore = _score_project_header_candidate(line, next_line, median_font_size)
-        if hscore >= header_threshold:
-            line.block_type = "PROJECT_TITLE"
             continue
 
         # Default narrative line
@@ -542,6 +673,8 @@ def _clean_project_name(header_text: str) -> Tuple[str, List[str]]:
     raw = raw.replace("\ufffd", " – ")
     
     extracted_techs: list[str] = []
+    
+    # Extract from parentheses first
     parens_match = re.search(r"\(([^)]+)\)", raw)
     if parens_match:
         inside = parens_match.group(1)
@@ -552,6 +685,13 @@ def _clean_project_name(header_text: str) -> Tuple[str, List[str]]:
 
     parts = re.split(r"\s*[–—·|:\-]\s*", raw)
     title = parts[0].strip()
+    
+    # Also search for technologies in the rest of the string (after title)
+    if len(parts) > 1:
+        rest_of_string = " ".join(parts[1:])
+        found_techs = _TECH_REGEX.findall(rest_of_string)
+        if found_techs:
+            extracted_techs.extend([t.title() for t in found_techs])
 
     title = _DATE_REGEX.sub("", title).strip()
     title = _URL_REGEX.sub("", title).strip()
@@ -578,22 +718,11 @@ def _assemble_projects(
     projects: list[dict] = []
     i = 0
     num_lines = len(lines)
-    in_project_eligible_section = True  # Allows heading-independent extraction
 
     while i < num_lines:
         line = lines[i]
 
-        # Track section context
-        if line.block_type == "SECTION_HEADING":
-            txt_lower = line.text.lower()
-            if any(k in txt_lower for k in ["education", "skills", "certifications", "achievements", "contact"]):
-                in_project_eligible_section = False
-            else:
-                in_project_eligible_section = True
-            i += 1
-            continue
-
-        if line.block_type == "PROJECT_TITLE" and in_project_eligible_section:
+        if line.block_type == "PROJECT_TITLE":
             title, inline_techs = _clean_project_name(line.text)
             
             name_blocks = [line]
@@ -604,41 +733,31 @@ def _assemble_projects(
             if inline_techs:
                 tech_blocks.append(line)
 
-            # Check if next line is TECHNOLOGY_LINE
             j = i + 1
-            if j < num_lines and lines[j].block_type == "TECHNOLOGY_LINE":
-                tech_blocks.append(lines[j])
-                found = _TECH_REGEX.findall(lines[j].text)
-                for t in found:
-                    project_techs.add(t.lower())
-                j += 1
-
-            # Collect description and bullet blocks belonging to this project
             while j < num_lines:
                 curr = lines[j]
                 
-                # Stop if another project title or non-eligible section heading is reached
+                # Stop if another project title or section heading is reached
                 if curr.block_type in ("PROJECT_TITLE", "SECTION_HEADING"):
                     break
 
-                if curr.block_type in ("BULLET", "DESCRIPTION", "LINK", "DATE", "TECHNOLOGY_LINE"):
-                    if curr.block_type == "TECHNOLOGY_LINE":
+                if curr.block_type == "TECHNOLOGY_LINE":
+                    tech_blocks.append(curr)
+                    found = _TECH_REGEX.findall(curr.text)
+                    for t in found:
+                        project_techs.add(t.lower())
+                    j += 1
+                elif curr.block_type in ("BULLET", "DESCRIPTION", "LINK", "DATE"):
+                    desc_blocks.append(curr)
+                    # Also look for technologies inside description blocks
+                    found_b = _TECH_REGEX.findall(curr.text)
+                    if found_b:
                         tech_blocks.append(curr)
-                        found = _TECH_REGEX.findall(curr.text)
-                        for t in found:
+                        for t in found_b:
                             project_techs.add(t.lower())
-                    else:
-                        desc_blocks.append(curr)
-                        found_b = _TECH_REGEX.findall(curr.text)
-                        if found_b:
-                            tech_blocks.append(curr)
-                            for t in found_b:
-                                project_techs.add(t.lower())
                     j += 1
                 else:
                     break
-
-            i = j  # Advance pointer
 
             # Build description text
             desc_texts = []
@@ -678,6 +797,8 @@ def _assemble_projects(
                     },
                     "source_blocks": [b.to_dict() for b in all_proj_blocks],
                 })
+            
+            i = j
         else:
             i += 1
 
@@ -790,6 +911,10 @@ def parse_resume(
     else:
         raise ValueError(f"Unsupported file format: {ext}. Expected .pdf or .docx")
 
+    # Apply semantic reconstruction pipeline
+    lines = _reconstruct_lines(lines)
+    lines = _detect_sections(lines, median_font_size)
+
     raw_text = "\n".join(l.text for l in lines if l.text)
 
     # Heading-independent project assembly with block evidence tracking
@@ -822,9 +947,9 @@ def extract_text(filepath: str) -> str:
     path = Path(filepath)
     ext = path.suffix.lower()
     if ext == ".pdf":
-        lines, _ = _extract_pdf_structured(filepath)
+        lines, _, _ = _extract_pdf_structured(filepath)
     elif ext in (".docx", ".doc"):
-        lines, _ = _extract_docx_structured(filepath)
+        lines, _, _ = _extract_docx_structured(filepath)
     else:
         lines = []
     return _clean_text("\n".join(l.text for l in lines))

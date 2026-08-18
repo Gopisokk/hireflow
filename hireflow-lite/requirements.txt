@@ -24,5 +24,9 @@ nltk
 numpy
 python-dotenv
 
+# Ollama & Validation
+ollama
+pydantic
+
 # Optional: LLM query expansion
 openai
