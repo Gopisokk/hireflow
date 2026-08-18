@@ -270,26 +270,7 @@ def verify_projects(
             for p in resume_projects
         ]
 
-    try:
-        from sentence_transformers import util as st_util
-    except ImportError:
-        print("  \u2717 sentence-transformers not installed, skipping verification.")
-        return [
-            {
-                "claimed_project": p.get("name", "Unknown"),
-                "status": "unverified",
-                "matched_repo": None,
-                "similarity": 0.0,
-                "is_fork": None,
-                "forked_from": None,
-                "total_commits": 0,
-                "active_days": 0,
-                "last_pushed": None,
-                "candidate_is_author": False,
-                "commit_frequency": 0.0,
-            }
-            for p in resume_projects
-        ]
+    import numpy as np
 
     print(f"  \u2192 Verifying {len(resume_projects)} resume projects against "
           f"{len(github_repos)} GitHub repos...")
@@ -317,12 +298,12 @@ def verify_projects(
     print("  \u2192 Encoding project and repo texts with SBERT...")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        resume_embs = model.encode(resume_texts, convert_to_tensor=True, device=device)
-        repo_embs = model.encode(repo_texts, convert_to_tensor=True, device=device)
+        resume_embs = model.encode(resume_texts, convert_to_numpy=True, device=device)
+        repo_embs = model.encode(repo_texts, convert_to_numpy=True, device=device)
 
     # Compute similarity matrix: resume_projects x github_repos
     print("  \u2192 Computing similarity matrix...")
-    sim_matrix = st_util.cos_sim(resume_embs, repo_embs)
+    sim_matrix = np.dot(resume_embs, repo_embs.T)
 
     results = []
     for i, project in enumerate(resume_projects):
@@ -407,14 +388,14 @@ def verify_projects(
         readme_sim = 0.0
         if readme and best_sim >= 0.30:
             try:
-                from sentence_transformers import util as _st_util
+                import numpy as np
                 proj_text = f"{project.get('name', '')} {project.get('description', '')}".strip()
                 if proj_text:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        proj_emb_r   = model.encode([proj_text],    convert_to_tensor=True, device=device)
-                        readme_emb_r = model.encode([readme[:400]], convert_to_tensor=True, device=device)
-                    readme_sim = float(_st_util.cos_sim(proj_emb_r, readme_emb_r)[0][0])
+                        proj_emb_r   = model.encode([proj_text],    convert_to_numpy=True, device=device)
+                        readme_emb_r = model.encode([readme[:400]], convert_to_numpy=True, device=device)
+                    readme_sim = float(np.dot(proj_emb_r, readme_emb_r.T)[0][0])
             except Exception:
                 readme_sim = 0.0
 

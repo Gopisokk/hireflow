@@ -37,7 +37,6 @@ os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN_WARNING"] = "1"
 warnings.filterwarnings("ignore")
 
 import torch
-from sentence_transformers import SentenceTransformer
 
 from database import init_db, reset_db, upsert_student, upsert_fts, upsert_embedding, DB_PATH, EMBED_DIM
 
@@ -69,7 +68,7 @@ def _setup_device() -> str:
 
 DEVICE = _setup_device()
 
-_SBERT_MODEL: Optional[SentenceTransformer] = None
+_SBERT_MODEL = None
 
 
 def _get_sbert_model():

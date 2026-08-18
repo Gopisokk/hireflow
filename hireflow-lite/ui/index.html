@@ -679,9 +679,9 @@ async function checkHealth() {
 
     // DB stats
     const stats = data.db_stats || {};
-    document.getElementById('db-students').textContent = stats.students ?? '0';
-    document.getElementById('db-embed').textContent    = stats.embeddings ?? '0';
-    const cnt = stats.students ?? 0;
+    document.getElementById('db-students').textContent = stats.total ?? '0';
+    document.getElementById('db-embed').textContent    = stats.total ?? '0';
+    const cnt = stats.total ?? 0;
     const nc  = document.getElementById('student-count');
     if (cnt > 0) { nc.textContent = cnt; nc.style.display = 'inline-block'; }
     else { nc.style.display = 'none'; }

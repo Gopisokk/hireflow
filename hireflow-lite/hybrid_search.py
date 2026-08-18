@@ -27,7 +27,6 @@ import json
 from typing import List, Tuple, Dict, Optional
 
 import sqlite_vec
-from sentence_transformers import SentenceTransformer
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Database Connection

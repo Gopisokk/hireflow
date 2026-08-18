@@ -58,7 +58,8 @@ try:
     from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.middleware.cors import CORSMiddleware
-except ImportError:
+except ImportError as e:
+    print(f"ImportError: {e}")
     print("Run: venv\\Scripts\\pip install fastapi uvicorn python-multipart")
     sys.exit(1)
 

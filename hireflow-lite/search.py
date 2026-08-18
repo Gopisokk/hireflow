@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import torch
-from sentence_transformers import SentenceTransformer
 
 from database import (
     connect, DB_PATH, serialize_vec,
@@ -56,7 +55,7 @@ except Exception:
 # ── SBERT Setup (CPU mode for instant, crash-free vector encoding) ──────────
 
 DEVICE = "cpu"
-_MODEL: Optional[SentenceTransformer] = None
+_MODEL = None
 
 
 def _get_model():
