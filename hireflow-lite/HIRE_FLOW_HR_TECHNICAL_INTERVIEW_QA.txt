@@ -1,0 +1,1130 @@
+================================================================================
+HIREFLOW-LITE — HR + TECHNICAL INTERVIEW QUESTION & ANSWER BANK
+================================================================================
+
+Repository reviewed: Gopisokk/hireflow
+Project: HireFlow-Lite — AI-powered ATS + GitHub candidate verification
+Purpose of this file: Interview preparation based on the actual repository code.
+
+IMPORTANT:
+This is intentionally much harder than a normal project Q&A sheet. Questions are
+written from the perspective of an HR interviewer, technical interviewer, senior
+engineer, skeptical reviewer, and interviewer trying to discover whether the
+candidate really understands the implementation.
+
+CURRENT CODE FACTS USED IN THIS FILE
+------------------------------------
+- Backend: FastAPI.
+- Resume formats: PDF/DOCX in the active extractor.
+- LLM parsing: Qwen 2.5 1.5B through Ollama.
+- Resume LLM input is capped at 3500 characters.
+- Embeddings: all-MiniLM-L6-v2, 384 dimensions, custom mean pooling wrapper.
+- Lexical search: SQLite FTS5 / BM25.
+- Vector search: sqlite-vec.
+- Fusion: Reciprocal Rank Fusion (RRF), k=60 in search.py.
+- ATS reranking: 8 weighted components.
+- ATS weights: 35/25/10/10/8/5/4/3.
+- GitHub score: separate from ATS.
+- Current final composite: 65% ATS + 35% GitHub.
+- GitHub verifier: GraphQL with token, REST fallback without token.
+- GitHub profile data is cached for 24 hours.
+- Active project verifier uses semantic matching + metadata/history signals.
+- Current UI is a plain HTML/CSS/JavaScript file, not a Next.js application.
+- The repository has legacy/alternative modules including hybrid_search.py,
+  resume_parser.py and project_authenticator.py.
+
+================================================================================
+PART 1 — “TELL ME ABOUT YOUR PROJECT”
+================================================================================
+
+Q1. Tell me about HireFlow in one minute.
+A.
+HireFlow is an AI-powered applicant tracking system that automates the early stages
+of technical recruitment. A recruiter uploads resumes, the system extracts and
+structures candidate information using a local Qwen model, stores both structured
+and searchable representations, and retrieves candidates using BM25 keyword search
+plus MiniLM semantic search. Those candidates are then reranked with an evidence-
+based ATS score that emphasizes required skills and project evidence. Finally, for
+shortlisted candidates, HireFlow can inspect GitHub activity and projects to measure
+whether the technical claims on the resume have public evidence behind them.
+
+Q2. What real problem does HireFlow solve?
+A.
+Traditional screening is slow and often depends on keyword matching. A candidate
+may understand a technology but describe it differently, while another candidate
+may keyword-stuff a resume without actually demonstrating the skill. HireFlow tries
+to solve both problems by combining exact lexical retrieval, semantic retrieval,
+structured skill/project extraction, and GitHub evidence.
+
+Q3. Why did you build this project?
+A.
+I wanted to combine NLP, information retrieval, backend engineering, local LLM
+inference, databases and API integration into one end-to-end system. The project
+also gave me a concrete reason to solve a non-trivial problem: ranking candidates
+requires both recall and precision, and GitHub provides an external evidence source
+that a plain resume cannot provide.
+
+Q4. What is the most innovative part of your project?
+A.
+The strongest differentiator is the separation between fit and evidence. The ATS
+score answers “How well does this resume match the JD?”, while the GitHub layer asks
+“Is there technical evidence that supports the claims?” Keeping those scores
+independent makes the system easier to explain and tune.
+
+Q5. What is the biggest weakness of your project?
+A.
+The largest current weakness is extraction quality on difficult resumes. The parser
+caps the LLM input at 3500 characters, so a long resume can lose later sections.
+Scanned PDFs also need OCR, which the active lightweight extractor does not provide.
+Those are the first areas I would improve in a production version.
+
+================================================================================
+PART 2 — “WHY THIS TECHNOLOGY?” QUESTIONS
+================================================================================
+
+Q6. Why did you use FastAPI?
+A.
+I needed a lightweight Python API layer that works naturally with the ML/NLP code.
+FastAPI gives request validation, async endpoint support, automatic OpenAPI docs,
+and is convenient for multipart file uploads. Since the core workloads are already
+Python-based, it avoids introducing another backend language only for HTTP routing.
+
+Follow-up: Why not Flask?
+A.
+Flask would work, but FastAPI gives stronger typing and built-in API schema support.
+For a project with multiple structured endpoints, upload forms and background jobs,
+that was more convenient.
+
+Q7. Why Python for the whole backend?
+A.
+The core value is in NLP and retrieval, where the Python ecosystem is strong. Using
+one language for FastAPI, PyMuPDF, Ollama, PyTorch/Transformers, SQLite and GitHub
+integration reduced integration complexity.
+
+Q8. Why Qwen 2.5 1.5B?
+A.
+I wanted a local model small enough to run on constrained hardware while still being
+capable of structured extraction. A 1.5B model is a deliberate tradeoff: lower cost,
+privacy, and local execution at the expense of some extraction quality compared with
+larger models.
+
+Q9. Why Ollama?
+A.
+Ollama simplifies local model serving. Instead of manually managing a full model
+runtime, I can call a local inference API while keeping resume data on the machine.
+It also makes swapping local models easier.
+
+Q10. Why not OpenAI GPT-4o?
+A.
+For a student project, a local model gives privacy and zero per-resume API cost.
+It also makes the system usable offline after models are available. If extraction
+accuracy became the top priority and privacy requirements allowed cloud processing,
+a larger model could be a strong alternative.
+
+Q11. Why MiniLM?
+A.
+MiniLM gives a good balance between semantic quality and resource cost. The current
+model produces 384-dimensional embeddings, which are inexpensive to compute and
+store. That makes it practical to use on CPU while preserving GPU resources for the
+local LLM workload.
+
+Q12. Why did you implement your own MiniLM wrapper instead of only using
+sentence-transformers?
+A.
+The active wrapper uses Hugging Face AutoTokenizer and AutoModel directly. That gives
+me control over tokenization, mean pooling, normalization and batching, while keeping
+the dependency behavior predictable.
+
+Q13. How exactly do you create the embedding?
+A.
+The text is tokenized with truncation at 512 tokens. I run the Transformer, take the
+last hidden states, apply the attention mask, mean-pool the token vectors, and then
+L2-normalize the resulting vector. Because the vector is normalized, dot product can
+be used as a cosine-similarity-like measure.
+
+Q14. Why 384 dimensions?
+A.
+That is the dimensionality of all-MiniLM-L6-v2. It is small enough for fast local
+search and storage, especially compared with larger 768/1536-dimensional embedding
+models.
+
+Q15. Why SQLite?
+A.
+For the current project scale, SQLite gives a single local file with relational
+storage and very low operational overhead. I can keep structured candidate data,
+FTS5 search and vector search in the same local system.
+
+Follow-up: Why not PostgreSQL?
+A.
+PostgreSQL is the better production choice when I need concurrent writes, multiple
+application replicas, stronger operational tooling and horizontal scalability.
+SQLite is a deliberate simplicity choice for this project stage.
+
+Q16. Why sqlite-vec instead of Pinecone?
+A.
+Pinecone adds a separate hosted service and external dependency. sqlite-vec lets me
+keep vectors alongside the relational candidate data locally. That reduces cost,
+complexity and privacy exposure for this deployment size.
+
+Q17. Why FTS5/BM25?
+A.
+Technical recruiting contains many exact tokens such as Python, FastAPI, PostgreSQL,
+Kafka and Kubernetes. Semantic search can understand related language, but lexical
+search is excellent for exact technologies. FTS5 gives me a lightweight BM25-style
+retrieval path directly inside SQLite.
+
+Q18. Why use both BM25 and vector search?
+A.
+They solve different failure modes. BM25 is strong at exact terms and rare keywords;
+vector retrieval is strong when the wording differs but the meaning is similar.
+Using both reduces the chance of missing a candidate because of vocabulary mismatch.
+
+Q19. Why RRF instead of adding BM25 and vector scores directly?
+A.
+Their raw scores are not naturally comparable. BM25 and vector distance have different
+scales and meanings. Reciprocal Rank Fusion works on rank positions, so I can combine
+the two retrieval systems without pretending their numeric scores share the same
+calibration.
+
+Q20. Why choose RRF k=60?
+A.
+60 is a commonly used smoothing constant and provides a reasonable balance between
+high-ranked and lower-ranked results. The implementation uses the rank contribution
+1/(60+rank).
+
+Q21. Why not use a cross-encoder reranker?
+A.
+A cross-encoder could improve ranking quality by jointly encoding JD and resume, but
+it is more computationally expensive. The current design uses a cheaper retrieve-
+then-rerank structure. A cross-encoder is a realistic next-stage improvement for a
+production system.
+
+Q22. Why not use Elasticsearch?
+A.
+Elasticsearch would be strong for large-scale search and observability, but it adds
+infrastructure. FTS5 is sufficient for the current system. I would move to a
+dedicated search platform when scale or query complexity justifies it.
+
+================================================================================
+PART 3 — THE “WHY NEXT.JS?” TRICK QUESTION
+================================================================================
+
+Q23. Why did you use Next.js for HireFlow?
+A.
+I would NOT claim that the current HireFlow repository uses Next.js. The current
+frontend is a single HTML/CSS/JavaScript file at ui/index.html served by FastAPI.
+There is no Next.js application in the current active path.
+
+If I were asked why I WOULD choose Next.js for a future production frontend, I would
+say it provides a structured React framework, routing, server-side rendering where
+needed, good application organization, and a mature frontend ecosystem. But I would
+not pretend that it is already part of this repository.
+
+This distinction is important: an interviewer may intentionally ask about a
+technology written on your resume and expect you to notice that the repository does
+not contain it.
+
+Q24. Why didn't you use Next.js?
+A.
+For this version, the UI was intentionally kept simple because the research focus
+was the ATS/search/verification pipeline rather than frontend complexity. A static
+single-page UI was enough to demonstrate ingestion, progress streaming, ranking and
+GitHub verification.
+
+Q25. Why React in another project but plain HTML here?
+A.
+HireFlow's current UI is a lightweight operational dashboard, so plain HTML/CSS/JS
+reduced frontend complexity. The backend already exposes JSON endpoints and SSE,
+so a React/Next.js migration would be straightforward if the UI needed richer state
+management.
+
+================================================================================
+PART 4 — RESUME INGESTION QUESTIONS
+================================================================================
+
+Q26. Walk me through what happens when HR uploads 100 resumes.
+A.
+1. FastAPI receives the CSV and ZIP.
+2. It saves them under a job-specific upload directory.
+3. ingest.py reads the CSV and detects columns.
+4. It builds a resume file index.
+5. It matches each row to a resume using roll number/name heuristics.
+6. Resumes are parsed sequentially through Ollama.
+7. Parsed profiles are batch-embedded with MiniLM.
+8. Candidate records, FTS content and vectors are written to SQLite.
+9. The frontend receives progress updates via SSE.
+
+Q27. Why sequential resume parsing instead of parallel parsing?
+A.
+The local Ollama model is GPU-bound and the project was designed for limited VRAM.
+Parallel requests can increase memory pressure or cause instability. Sequential
+inference is slower per batch but safer on the target hardware.
+
+Q28. What timeout does each resume have?
+A.
+The active ingestion wrapper gives the outer parse operation a 95-second hard timeout,
+while the Ollama call itself has a 75-second timeout.
+
+Q29. Why two timeouts?
+A.
+The inner timeout limits the model call, while the outer timeout protects the whole
+resume parsing task from getting stuck due to wrapper/thread/executor behavior.
+
+Q30. What happens if Ollama fails?
+A.
+The system falls back to raw document extraction so the candidate can still have raw
+text and an embedding. The tradeoff is that structured skills/projects may be empty,
+which weakens evidence-based ATS scoring.
+
+Q31. What happens if a resume has no selectable text?
+A.
+The current extractor may return little or no text because it does not implement OCR.
+The production fix is an OCR fallback such as a scanned-PDF detection plus OCR engine.
+
+Q32. What happens if the PDF has two columns?
+A.
+PyMuPDF block ordering is used to approximate reading order. Complex layouts can still
+produce imperfect ordering, so a layout-aware parser or structured PDF analysis would
+be a future improvement.
+
+Q33. Why truncate the resume to 3500 characters?
+A.
+The local 1.5B model has limited context and output capacity. Truncation protects
+latency and helps keep prompts within a predictable context budget. The downside is
+that late resume sections can be missed.
+
+Q34. How would you fix the 3500-character problem?
+A.
+I would use section-aware chunking. Instead of first-N characters, I would detect
+sections such as Experience, Projects and Skills, summarize/extract each independently,
+then merge the structured outputs with deterministic deduplication.
+
+Q35. What if the resume filename does not contain the roll number?
+A.
+The code first tries exact and prefix matching, then falls back to matching the first
+two name components against the filename. If it still cannot resolve a file, that
+candidate is reported as having no matched resume.
+
+Q36. What if two filenames both match the same candidate name?
+A.
+The current heuristic can be ambiguous. A production implementation should require
+an explicit candidate ID mapping or a deterministic unique-match rule rather than
+silently choosing a potentially wrong file.
+
+================================================================================
+PART 5 — LLM PARSING + HALLUCINATION
+================================================================================
+
+Q37. Why use an LLM for resume parsing instead of regex?
+A.
+Regex is useful for deterministic fields like email and phone, but resumes contain
+semantically structured information. A project can be described in several sentences,
+and skills can appear in context instead of a simple list. The LLM handles this richer
+language while the deterministic validator provides a safety layer.
+
+Q38. How do you stop the LLM from hallucinating projects?
+A.
+I do not trust the model blindly. The output has a Pydantic schema, and then a
+rules-based validator checks project names/descriptions against source text. Low-
+confidence projects can mark the result as needs_review.
+
+Q39. Does your validator guarantee that hallucinations are impossible?
+A.
+No. It reduces risk but does not mathematically guarantee correctness. Some checks
+are heuristic. For example, the current validator's technology branch still records
+the technology even if source support is weak. A production validator should be more
+strict and use explicit evidence spans.
+
+Q40. What if the LLM returns invalid JSON?
+A.
+The parser first tries JSON decoding and strips markdown fences when necessary. If
+parsing fails, it retries with a tighter JSON-only prompt.
+
+Q41. Why temperature 0?
+A.
+Resume extraction benefits more from determinism than creativity. Temperature 0
+reduces variation between runs.
+
+Q42. Why use Pydantic if the LLM already returns JSON?
+A.
+Valid JSON only guarantees syntax. Pydantic provides a structural contract for the
+fields and types I expect. It is one layer of validation before deterministic evidence
+checks.
+
+================================================================================
+PART 6 — DATABASE QUESTIONS
+================================================================================
+
+Q43. Explain the database schema.
+A.
+There is a students table containing candidate metadata, JSON-serialized skills and
+projects, raw text and scores. students_fts is an FTS5 virtual table for lexical
+retrieval. resume_embeddings is a sqlite-vec table containing 384-dimensional
+embeddings. There is also a jobs table intended to cache search runs.
+
+Q44. Why store skills/projects as JSON inside SQLite?
+A.
+The project is relatively small and those fields are naturally nested structures.
+JSON lets me preserve structure without creating many join tables. For large-scale
+analytics, normalized relational tables or a document/search store might be better.
+
+Q45. Why store both raw_text and embeddings?
+A.
+The raw text is needed for lexical search, explanations and reprocessing. The embedding
+captures semantic meaning. One cannot replace the other.
+
+Q46. What happens when a candidate is re-ingested?
+A.
+The student row is upserted, the FTS record is replaced, and the existing vector is
+deleted before a new vector is inserted. This avoids duplicate search entries.
+
+Q47. Why WAL mode?
+A.
+SQLite WAL improves read/write concurrency and generally provides better behavior for
+an application that reads while background jobs are writing.
+
+Q48. What would you migrate first at scale?
+A.
+I would likely move structured storage to PostgreSQL and vector search to pgvector,
+with object storage for resume files and a durable job queue for ingestion.
+
+================================================================================
+PART 7 — ATS SCORING QUESTIONS
+================================================================================
+
+Q49. Explain the ATS scoring formula.
+A.
+The current score is a weighted sum of eight components plus a penalty:
+35% required skill match
+25% project evidence
+10% semantic alignment
+10% experience relevance
+8% keyword coverage
+5% resume quality
+4% education
+3% certifications
+plus 0 to -15 penalty.
+The final result is clamped to 0–100.
+
+Q50. Why is required skill match the largest component?
+A.
+In technical recruitment, missing a truly mandatory skill should matter more than
+having a strong resume format. The weight reflects that product requirement.
+
+Q51. Why is project evidence 25%?
+A.
+Listing “Python” in a skills section is weaker evidence than building a real project
+with Python. Project context provides behavioral evidence of usage.
+
+Q52. Why is semantic only 10%?
+A.
+Semantic similarity is useful but can over-generalize. Exact required technologies
+and explicit project evidence are more controllable for recruitment, so semantic
+alignment is a supporting rather than dominant signal.
+
+Q53. Why have a penalty layer?
+A.
+Some bad patterns should reduce scores even if weighted components look reasonable,
+such as extremely low required-skill coverage, missing projects, very short content,
+or obvious keyword stuffing.
+
+Q54. Explain the skill evidence multiplier.
+A.
+A matched required skill starts at weight 1.0. Every project that demonstrates that
+skill adds 0.5. So a skill shown in two projects receives stronger evidence than a skill
+only listed in the skills section.
+
+Q55. What is the danger of this multiplier?
+A.
+It can over-reward repetitive project mentions. I would eventually cap the multiplier
+or use diminishing returns so five similar projects do not dominate one genuinely deep
+experience.
+
+Q56. Does your ATS understand negation?
+A.
+Not robustly. A resume sentence like “I do not use Python” can still contain the token
+Python and create keyword evidence. Negation-aware parsing is an important improvement.
+
+Q57. How do you calibrate cosine similarity?
+A.
+The raw cosine is passed through a sigmoid with midpoint 0.30 and k=15. The purpose is
+not to call cosine a percentage directly, but to map observed similarity ranges into a
+more useful score scale.
+
+Q58. How would you prove the ATS is accurate?
+A.
+I would create a recruiter-labeled dataset and measure Precision@K, Recall@K, MRR and
+NDCG@K. I would compare BM25-only, vector-only, RRF, and the final evidence reranker.
+I would also evaluate false positives, false negatives and subgroup fairness.
+
+================================================================================
+PART 8 — SEARCH / RRF QUESTIONS
+================================================================================
+
+Q59. Why retrieve top_k * 4 first?
+A.
+The system intentionally over-retrieves before reranking. If I only retrieve the final
+Top-K, a candidate who is semantically relevant but slightly weaker on one retrieval
+method might never reach the expensive scoring stage.
+
+Q60. Suppose Candidate A is #1 in BM25 and #100 in vectors, while B is #5 in both.
+Who might win RRF?
+A.
+B can win because RRF rewards appearing well-ranked in both lists. This is a feature,
+not a bug: agreement between independent retrieval signals is strong evidence.
+
+Q61. What if BM25 returns nothing?
+A.
+The fusion still works with the vector results. Search failure in one channel should
+not completely destroy the other channel.
+
+Q62. What if both search systems miss the correct candidate?
+A.
+Then the candidate never reaches the reranker. This is why retrieval quality is a
+critical evaluation target. Increasing retrieval depth, better JD parsing, or adding
+a third retrieval method can reduce this risk.
+
+================================================================================
+PART 9 — GITHUB VERIFICATION QUESTIONS
+================================================================================
+
+Q63. Why verify GitHub?
+A.
+A resume is self-reported. GitHub can provide public evidence about repository
+existence, code technologies, commit history, authorship and project development.
+
+Q64. Does GitHub prove someone built the project?
+A.
+No. It provides evidence, not absolute proof. Team repositories, copied code, private
+work, renamed repositories and organization projects make ownership a nuanced question.
+
+Q65. Explain the GitHub score architecture.
+A.
+The current implementation groups factors into:
+Project Authenticity 40%
+Development History 25%
+Technical Evidence 20%
+Repository Quality 10%
+Social Context 5%.
+
+Q66. Why only 5% social context?
+A.
+Stars, forks and public profile signals are weak proxies for engineering ability. A
+student can build a strong project with zero stars. Those signals should not dominate.
+
+Q67. What happens if the candidate has no GitHub?
+A.
+The ATS can still run. GitHub should be treated as supplementary evidence rather than
+an absolute requirement.
+
+Q68. Why GraphQL?
+A.
+The verification engine needs many related GitHub fields in one response. GraphQL
+lets me request the exact profile, repositories, language, topics, README and history
+fields I need rather than making a large number of separate REST calls.
+
+Q69. Why REST fallback?
+A.
+It makes standalone verification usable without a token. The system can still get
+basic profile/repository data under GitHub's unauthenticated rate limits.
+
+Q70. Why cache GitHub responses for 24 hours?
+A.
+Repeated verification requests for the same candidate otherwise waste API quota and
+increase latency. A 24-hour cache is a practical tradeoff for recruitment sessions.
+
+Q71. What is wrong with the current token design?
+A.
+GitHub tokens are stored in the SQLite students table in plaintext. That is unsafe for
+production. I would use OAuth, short-lived credentials where possible, and a secrets
+manager instead of persisting raw tokens.
+
+Q72. What if a candidate's project is a fork?
+A.
+Fork is not automatically suspicious. The verifier checks contribution ratio and
+other evidence. A fork with substantial original work can still receive reasonable
+ownership/authorship evidence.
+
+Q73. What if the candidate's repository has one huge commit?
+A.
+The project verifier flags patterns such as minimal history or single large initial
+commit as upload risk. It does not automatically declare fraud.
+
+Q74. Why does weekend activity affect the GitHub score?
+A.
+The current code includes it as one weak contribution signal. But I would explicitly
+say it is a heuristic and not a scientifically validated measure of engineering quality.
+For production I would likely remove it or validate its fairness first.
+
+Q75. What if a candidate worked on private repositories?
+A.
+Public GitHub cannot see those repositories, so the score can underrepresent real work.
+That is why GitHub must be supplementary and should have a strong “insufficient public
+evidence” state rather than interpreting absence as poor ability.
+
+Q76. How does project verification work if resume project name and repo name differ?
+A.
+It embeds resume project text and repository text containing name, description and a
+README snippet. It then compares semantic similarity and adds name-fuzzy, language,
+README, authorship and history evidence. So exact name equality is not required.
+
+Q77. What if two resume projects match one repository?
+A.
+The current best-match implementation can allow that. A production fix would perform
+one-to-one matching or global assignment so the same repository is not counted as
+independent evidence for multiple projects.
+
+Q78. How many commits does GitHub verification inspect?
+A.
+The per-repository GraphQL query requests up to the latest 100 commit-history nodes.
+The overall repository total count can be larger, but detailed active-day/authorship
+signals are derived from the sampled nodes. That is an important limitation.
+
+================================================================================
+PART 10 — “TINY DETAIL” QUESTIONS INTERVIEWERS LOVE
+================================================================================
+
+Q79. Why normalize embeddings?
+A.
+L2 normalization makes the dot product correspond to cosine similarity, which is
+useful for comparing embeddings independent of vector magnitude.
+
+Q80. Why use mean pooling?
+A.
+The wrapper creates one fixed-length sentence representation from token embeddings.
+Mean pooling is simple, fast and commonly effective for sentence-level embeddings.
+
+Q81. Why max_length=512 in MiniLM?
+A.
+It controls memory and latency and matches the practical context limits of the model.
+Texts longer than that are truncated during embedding.
+
+Q82. What happens to a 1000-token project description?
+A.
+The MiniLM wrapper truncates the tokenized input to 512 tokens for that embedding call.
+The complete stored text can still exist, but the embedding only represents the first
+part.
+
+Q83. Why `row_factory = sqlite3.Row`?
+A.
+It lets database rows be accessed by column names instead of numeric indexes, which
+makes the code clearer and easier to convert to dictionaries.
+
+Q84. Why `PRAGMA journal_mode=WAL`?
+A.
+It improves read/write concurrency and avoids many of the blocking behaviors of the
+traditional rollback journal.
+
+Q85. Why use background threads in FastAPI?
+A.
+The main processing path contains blocking model/API/database work. Background threads
+allow the HTTP request to return a job ID quickly while the expensive work continues.
+
+Q86. Why SSE instead of WebSockets?
+A.
+The UI mostly needs server-to-browser progress updates, not a full bidirectional
+connection. Server-Sent Events are simpler for one-way streaming and fit the job log
+use case well.
+
+Q87. Why keep job state in Python dictionaries?
+A.
+It is simple for a single-process deployment. It is not suitable for a multi-instance
+production service because state disappears on restart and is not shared across workers.
+
+Q88. Why use `uuid` job IDs?
+A.
+It gives a reasonably unique identifier for a submitted ingestion/search job without
+exposing a sequential database ID.
+
+Q89. Why remove raw_text before returning search results?
+A.
+Raw resume text can contain sensitive personal information and is unnecessary for the
+summary ranking response. The current code also removes GitHub tokens before returning
+results.
+
+================================================================================
+PART 11 — SECURITY QUESTIONS
+================================================================================
+
+Q90. What security issue do you see immediately in server.py?
+A.
+Wildcard CORS: allow_origins=["*"]. That is too open for production.
+
+Q91. What other security issue exists?
+A.
+The API has no visible authentication/authorization layer in the active server.
+There is also a destructive /api/reset endpoint.
+
+Q92. What is the ZIP extraction risk?
+A.
+Blind `extractall()` can enable ZIP path traversal if malicious archive entries contain
+paths outside the intended directory. I would validate each member's resolved path before
+extracting it.
+
+Q93. What about uploaded filenames?
+A.
+They are used when constructing paths. Production code should sanitize filenames and
+prefer generated server-side names.
+
+Q94. How would you secure the GitHub token?
+A.
+Never store raw PATs in the candidate database. Use OAuth or short-lived credentials,
+keep secrets in a secret manager, encrypt where necessary, and log only masked values.
+
+================================================================================
+PART 12 — API / BACKEND QUESTIONS
+================================================================================
+
+Q95. Why is `/api/quick-score` useful if you already have ingestion/search?
+A.
+It gives recruiters an ad-hoc single-candidate workflow. They can submit one resume
+and JD without changing the persistent candidate database.
+
+Q96. What is the difference between quick-score and bulk search?
+A.
+Quick-score parses a single uploaded resume in memory/temporary storage and can directly
+return the result. Bulk search assumes candidates are already indexed and performs
+retrieval first, then expensive reranking only on the shortlist.
+
+Q97. Why is retrieve-then-rerank better than scoring every candidate with the full ATS?
+A.
+The full ATS includes multiple semantic and heuristic computations. Running that on
+every resume is more expensive than first using fast database retrieval to produce a
+shortlist.
+
+================================================================================
+PART 13 — ERROR HANDLING / FAILURE CASES
+================================================================================
+
+Q98. Database is empty. What happens?
+A.
+search.py raises a clear error instructing the user to run ingestion first.
+
+Q99. What if the JD is empty?
+A.
+The ATS scoring function returns an error for an empty JD, because a meaningful match
+cannot be computed.
+
+Q100. What if GitHub returns HTTP 401?
+A.
+The GitHub verifier raises an error indicating the token is invalid or expired.
+
+Q101. What if GitHub rate limits you?
+A.
+The verifier checks rate-limit responses and pauses until the reset window before retrying
+in several GraphQL paths. It also has a 24-hour cache to reduce repeated calls.
+
+Q102. What if a GitHub username is invalid?
+A.
+The profile fetch can report that the user was not found, and the caller can surface the
+verification error rather than pretending the candidate was verified.
+
+Q103. What if GitHub is down?
+A.
+ATS scoring should still be conceptually available. GitHub should be an enrichment step,
+not a prerequisite for all candidate ranking.
+
+================================================================================
+PART 14 — EDGE CASES THAT CAN TRICK YOUR ATS
+================================================================================
+
+Q104. Resume says “Python developer, but I do NOT use Python.” What happens?
+A.
+The current keyword/synonym logic can still treat Python as evidence because it does not
+have robust negation detection. This is a known false-positive edge case.
+
+Q105. Resume says “familiar with FastAPI” but has no project using it. Is that equal to
+“built three FastAPI services”?
+A.
+No. The project evidence mechanism is intended to distinguish those cases, because skills
+demonstrated in projects receive stronger evidence.
+
+Q106. Candidate has no projects but 5 years experience. Will HireFlow automatically reject?
+A.
+No. The scoring architecture is weighted; project evidence is important, but experience,
+skills, semantics and other components can still produce a strong result.
+
+Q107. Candidate has a great resume but no GitHub.
+A.
+They should still be considered through ATS scoring. GitHub is supplementary evidence.
+
+Q108. Candidate has huge GitHub activity but poor JD fit.
+A.
+The final score still gives ATS 65% and GitHub 35%, so strong GitHub activity cannot fully
+overcome poor job fit.
+
+Q109. Candidate has one perfect project but few public contributions.
+A.
+The project authenticity layer can still reward strong project evidence even if broader
+social/contribution signals are weak.
+
+================================================================================
+PART 15 — TRADEOFF QUESTIONS
+================================================================================
+
+Q110. What did you sacrifice by using a small local model?
+A.
+Inference quality on difficult documents. I gained privacy, lower cost and easier local
+deployment.
+
+Q111. What did you sacrifice by using SQLite?
+A.
+Horizontal scalability and high write concurrency. I gained simplicity and a very low
+operations burden.
+
+Q112. What did you sacrifice by using 384-dimensional embeddings?
+A.
+Potential semantic expressiveness versus larger models. I gained faster CPU inference
+and cheaper storage.
+
+Q113. Why not make the GitHub score 50%?
+A.
+Because public GitHub behavior is not equally available or equally representative for all
+candidates. The current 35% weight keeps JD fit dominant.
+
+Q114. Why not use an LLM for the final score?
+A.
+A deterministic weighted score is easier to explain, test, audit and reproduce. I use
+LLMs where language understanding is useful, not where a simple deterministic formula
+is enough.
+
+================================================================================
+PART 16 — SCALABILITY / SYSTEM DESIGN QUESTIONS
+================================================================================
+
+Q115. How would you support 100,000 resumes per day?
+A.
+I would move parsing to a durable queue, run multiple GPU workers, store files in object
+storage, use PostgreSQL/pgvector or a search system, add retry/dead-letter handling, and
+make GitHub enrichment asynchronous.
+
+Q116. What breaks first in your current architecture?
+A.
+Local LLM parsing, because inference is deliberately sequential. After that, SQLite's
+write concurrency and the in-memory job store become important scaling limits.
+
+Q117. How would you prevent one very slow resume from blocking the entire batch?
+A.
+Keep timeouts and make each resume an independent job. With a queue architecture, a slow
+resume can fail or retry independently without blocking all other candidates.
+
+Q118. What if 100 recruiters submit JDs at once?
+A.
+The current in-memory job/thread design is not ideal. I would move job execution to worker
+processes and use a durable queue so requests are isolated and backpressure is explicit.
+
+================================================================================
+PART 17 — INTERVIEWER TRIES TO CATCH YOU LYING
+================================================================================
+
+Q119. “You told me HireFlow uses Next.js. Show me where.”
+A.
+It does not in the current repository. The active UI is plain HTML/CSS/JavaScript in
+ui/index.html. If Next.js appears on my resume, I should separate it from this project
+rather than claim it is used here.
+
+Q120. “You told me you use GPT-4. Where is it?”
+A.
+The active parsing path uses local Qwen through Ollama. The repository contains an
+alternative hybrid_search.py that can use GPT-4o-mini for HyRE, but that is not the
+current FastAPI execution path.
+
+Q121. “You said GitHub uses 40 factors. Show me the 40.”
+A.
+The comments say 40, but the current registered factor set is 39. I would answer with
+the accurate current count and explain that the comment is stale.
+
+Q122. “Does your validator guarantee hallucination-free output?”
+A.
+No. It reduces the risk. I would never claim a heuristic validator guarantees zero
+hallucinations.
+
+Q123. “Does GitHub prove project ownership?”
+A.
+No. It provides evidence. Ownership is inferred from multiple signals such as commit
+authorship, fork status and development history.
+
+Q124. “Can your project automatically decide who gets hired?”
+A.
+It should not be positioned that way. It is a screening/ranking and evidence tool.
+Employment decisions need human review, appropriate policy and fairness safeguards.
+
+================================================================================
+PART 18 — HR / BEHAVIORAL QUESTIONS ABOUT YOUR PROJECT
+================================================================================
+
+Q125. What was the hardest technical problem you solved?
+A.
+The difficult part was balancing a local LLM, vector retrieval and GPU constraints.
+I had to keep Ollama parsing stable on limited VRAM, so I deliberately serialized LLM
+calls and then batch-embedded the resulting profiles.
+
+Q126. Tell me about a bug you would expect in this project.
+A.
+A good example is long-resume truncation: a perfectly good candidate can lose project
+information because only the first 3500 characters reach the LLM. The fix is section-aware
+chunking.
+
+Q127. What would you do differently if you started again?
+A.
+I would define a clearer canonical evidence model first, build labeled benchmark data
+before tuning score weights, and design secure credential handling before integrating
+GitHub tokens.
+
+Q128. How did you decide the weights 35/25/10/...?
+A.
+They represent product priorities in the current project, not a universal truth. In a
+production system I would calibrate them using recruiter labels and offline ranking metrics.
+
+Q129. What did you learn from building this?
+A.
+The main lesson is that retrieval and ranking are different problems. Getting a candidate
+into the shortlist requires high recall; deciding the final order requires stronger evidence.
+The second lesson is that LLM output needs deterministic validation.
+
+Q130. What if a recruiter disagrees with the score?
+A.
+The system should expose the reasons: matched skills, missing skills, component scores,
+project evidence and GitHub evidence. That lets a recruiter challenge the system instead
+of treating the score as a black box.
+
+================================================================================
+PART 19 — “DESIGN THIS BETTER” QUESTIONS
+================================================================================
+
+Q131. How would you improve resume parsing?
+A.
+Use section-aware extraction, OCR fallback, stronger evidence spans, deterministic email/
+phone/date extraction, and a second-pass semantic merger for projects and experience.
+
+Q132. How would you improve project verification?
+A.
+Use a one-to-one global project/repo assignment, deeper README/code evidence, commit-author
+resolution, branch history, repository ownership proof, and explicit “insufficient evidence”
+states.
+
+Q133. How would you improve ATS ranking?
+A.
+Use a cross-encoder on the retrieved top-K candidates, calibrate thresholds using labeled
+recruiter outcomes, and make the scoring job-family specific rather than one global formula.
+
+Q134. How would you improve GitHub credibility?
+A.
+Reduce noisy social heuristics, improve authorship verification, treat private work honestly,
+and separate “no evidence” from “negative evidence”.
+
+Q135. What metrics would you monitor in production?
+A.
+- Parse success rate
+- average/95th-percentile parse latency
+- retrieval recall
+- Precision@K / NDCG@K
+- GitHub API errors/rate limits
+- cache hit rate
+- scoring latency
+- number of manual overrides
+- false-positive / false-negative review rates
+- fairness metrics
+
+================================================================================
+PART 20 — VERY HARD TECHNICAL QUESTIONS
+================================================================================
+
+Q136. Why can cosine similarity produce misleading matches?
+A.
+Sentence embeddings capture broad semantic similarity, not strict logical truth.
+“Knows Python” and “does not know Python” can share many contextual tokens. That is why
+semantic similarity should be combined with explicit skill extraction and lexical checks.
+
+Q137. Why is `dot(resume_emb, jd_emb)` valid as cosine similarity?
+A.
+Because the MiniLM vectors are L2-normalized. For normalized vectors, dot product equals
+cosine similarity.
+
+Q138. Why is the current FTS5 query not the same as a full semantic JD parser?
+A.
+It searches the extracted keyword string. FTS5 handles lexical matching; it does not
+understand the entire meaning of a paragraph like a Transformer does.
+
+Q139. Why is RRF useful even when one model is much better?
+A.
+The weaker model can still provide complementary signals. Fusion can improve robustness
+when the errors of the two retrieval systems are not perfectly correlated.
+
+Q140. Could RRF hurt a perfect candidate?
+A.
+Yes, if the candidate ranks poorly in one retrieval channel and falls outside the retrieval
+cutoff. That is why retrieval depth is important and should be validated empirically.
+
+Q141. Is the GitHub score stable over time?
+A.
+Not necessarily. Public contributions and repositories change, and the system uses a 24-hour
+cache. A candidate can therefore get different scores on different days.
+
+Q142. Is the ATS score stable?
+A.
+It is more stable once the candidate data is stored, but changes in JD text, parser version,
+model version, synonym maps or scoring weights can change it. Production systems need model
+and scoring-version metadata for reproducibility.
+
+Q143. Does HireFlow currently version its scoring model?
+A.
+Not as a formal persisted score-version field. That is something I would add for auditability.
+
+Q144. Could changing the synonym map change historical rankings?
+A.
+Yes. Since skill matching depends on that map, a code change can produce different scores for
+the same resume/JD. Versioning the scoring configuration would solve that.
+
+================================================================================
+PART 21 — RAPID-FIRE QUESTIONS
+================================================================================
+
+Q145. PDF library?
+A. PyMuPDF.
+
+Q146. DOCX library?
+A. python-docx.
+
+Q147. LLM serving?
+A. Ollama.
+
+Q148. LLM model?
+A. Qwen 2.5 1.5B instruct.
+
+Q149. Embedding model?
+A. all-MiniLM-L6-v2.
+
+Q150. Embedding size?
+A. 384.
+
+Q151. Lexical index?
+A. SQLite FTS5.
+
+Q152. Vector index?
+A. sqlite-vec.
+
+Q153. Fusion method?
+A. RRF.
+
+Q154. RRF constant?
+A. 60.
+
+Q155. API framework?
+A. FastAPI.
+
+Q156. GitHub API?
+A. GraphQL with REST fallback.
+
+Q157. GitHub cache?
+A. Local JSON cache, 24 hours.
+
+Q158. ATS components?
+A. Eight.
+
+Q159. Largest ATS weight?
+A. Required Skill Match, 35%.
+
+Q160. Final composite?
+A. 65% ATS + 35% GitHub.
+
+Q161. Current frontend?
+A. Plain HTML/CSS/JavaScript in ui/index.html.
+
+Q162. Does current frontend use Next.js?
+A. No.
+
+Q163. OCR?
+A. Not in the active lightweight extractor.
+
+Q164. Main ATS bottleneck?
+A. Local LLM parsing.
+
+Q165. Main security weakness?
+A. Plaintext GitHub tokens + unauthenticated API/CORS wildcard.
+
+================================================================================
+PART 22 — QUESTIONS YOU SHOULD ASK THE INTERVIEWER
+================================================================================
+
+Q166. What question should YOU ask after presenting HireFlow?
+A.
+“What parts of your recruitment workflow are currently the biggest bottleneck — resume
+retrieval, technical assessment, or recruiter review? I’d be interested in how you measure
+screening quality.”
+
+Q167. What is a good architecture question to ask?
+A.
+“How do you currently evaluate ranking quality when human recruiter judgments disagree?”
+
+Q168. Why is this a strong question?
+A.
+Because HireFlow is fundamentally a ranking system, so it connects your project to the
+company's real engineering problem rather than asking a generic question.
+
+================================================================================
+PART 23 — THE 30-SECOND DEFENSE IF YOU FORGET DETAILS
+================================================================================
+
+Say:
+
+“The system has four core layers: extraction, retrieval, scoring and verification.
+Extraction uses local Qwen to turn resumes into structured data. Retrieval combines
+BM25 and MiniLM vectors with RRF. Scoring uses eight deterministic ATS components,
+with required skills and project evidence carrying the largest weights. GitHub is an
+independent evidence layer, and the final ranking blends ATS and GitHub at 65/35.
+The reason I designed it that way is to separate semantic understanding from ranking
+logic and from external evidence, so every stage can be tested independently.”
+
+================================================================================
+PART 24 — FINAL “ARE YOU REALLY THE DEVELOPER?” CHECKLIST
+================================================================================
+
+Before interview, make sure you can explain without looking at the code:
+
+[ ] Why FastAPI
+[ ] Why local Qwen
+[ ] Why 1.5B instead of larger LLM
+[ ] Why Ollama
+[ ] Why MiniLM
+[ ] Why 384 dimensions
+[ ] How mean pooling works
+[ ] Why BM25
+[ ] Why vectors
+[ ] Why RRF
+[ ] Why k=60
+[ ] Why top_k*4 retrieval
+[ ] Why eight ATS components
+[ ] Why 35% required skills
+[ ] What project evidence means
+[ ] How skill evidence multiplier works
+[ ] What sigmoid calibration does
+[ ] What the penalty layer does
+[ ] Why SQLite
+[ ] Why FTS5
+[ ] Why sqlite-vec
+[ ] What is stored in students
+[ ] What happens on re-ingestion
+[ ] What happens on LLM failure
+[ ] What happens to a scanned PDF
+[ ] What happens to a 10-page resume
+[ ] How GitHub GraphQL differs from REST
+[ ] Why GitHub caching exists
+[ ] What the 39 factors broadly measure
+[ ] Why GitHub is only 35%
+[ ] Why a fork is not automatically bad
+[ ] How authorship is checked
+[ ] What project_verifier does
+[ ] Why project/repo semantic matching is useful
+[ ] Why GitHub is evidence, not proof
+[ ] How to handle private repositories
+[ ] Current frontend is NOT Next.js
+[ ] Legacy modules are not always on active request path
+[ ] Security weaknesses in server.py
+[ ] How you would scale the system
+[ ] How you would evaluate ranking quality
+[ ] How you would make the system fairer
+
+================================================================================
+END — HIRE-FLOW INTERVIEW Q&A BANK
+================================================================================
