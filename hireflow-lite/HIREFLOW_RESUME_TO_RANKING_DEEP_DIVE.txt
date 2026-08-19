@@ -1,0 +1,1869 @@
+================================================================================
+HIREFLOW — RESUME-TO-RANKING COMPLETE DATA-FLOW GUIDE
+================================================================================
+
+Purpose
+-------
+This document explains HireFlow from the first character of a resume to the final
+candidate ranking, using a real sample resume as the running example. It is written
+for a CS student who does not already know ATS, BM25, embeddings, vector search,
+RRF, or GitHub verification.
+
+The goal is that after reading this file, a reader can explain:
+- what data enters HireFlow
+- exactly what text is extracted
+- what the LLM receives
+- what JSON is produced
+- how that data is stored
+- how a Job Description becomes a search query
+- how BM25 works on the candidate data
+- how semantic/vector search works
+- how RRF combines the two rankings
+- how the 8-component ATS score is calculated
+- how GitHub verification is added
+- how the final rank is produced
+- what the important edge cases and limitations are
+
+IMPORTANT CODE-ACCURACY NOTES
+------------------------------
+1. The active pipeline is server.py -> ingest.py -> qwen_resume_parser.py ->
+   qwen_validator.py -> MiniLM/database.py and server.py -> search.py ->
+   ats_engine.py -> optional github_verifier.py/project_verifier.py.
+
+2. The active resume parser sends at most 3,500 characters to Qwen. The source code
+   truncates the extracted resume text with `plain_text[:3500]` before the model call.
+
+3. The active ATS engine uses 8 components with weights:
+   35% Required Skill Match
+   25% Project Evidence
+   10% Semantic Alignment
+   10% Experience Relevance
+    8% Keyword Coverage
+    5% Resume Quality
+    4% Education
+    3% Certifications
+   plus a 0 to -15 penalty layer.
+
+4. The search system performs vector retrieval + FTS5/BM25 retrieval, then Reciprocal
+   Rank Fusion (RRF), then ATS reranking. RRF uses k=60.
+
+5. The current final composite, when GitHub verification is available, is:
+   Composite = ATS * 0.65 + GitHub * 0.35
+
+6. The repository's current frontend is plain HTML/CSS/JavaScript. Next.js appears in
+   the sample resume's technology list, but it is NOT the current HireFlow frontend.
+   Do not confuse “technology listed in the resume” with “technology used to build
+   HireFlow.”
+
+7. The sample resume was supplied as `23AD044(3).docx`. The parsed text contains the
+   candidate profile, education, MOFA, FireForm, HireFlow, AgentNexus, BacklogBridge,
+   competitive programming, certifications, achievement and technologies.
+
+================================================================================
+PART 1 — THE SAMPLE RESUME
+================================================================================
+
+The running example is the resume of GOPI R K.
+
+At the top it contains:
+- email: gopi030506@gmail.com
+- phone: 9345869720
+- LinkedIn: linkedin.com/in/gopirk
+- GitHub: github.com/Gopisokk
+
+Education:
+- Chennai Institute of Technology, Chennai
+- B.Tech in Artificial Intelligence and Data Science
+- Sep 2023 – June 2027
+- CGPA 7.8 / 10
+
+Open-source contribution:
+- MOFA – Multi-Observable Framework for AI Agents
+- FireForm – AI-powered Emergency Report System
+
+Projects:
+- HireFlow — AI-Powered Candidate Screening & GitHub Verification Platform
+- AgentNexus — Autonomous AI Agent Wallet & Payment Infrastructure
+- BacklogBridge MCP — Agentic Issue Tracking Server
+
+Competitive programming:
+- LeetCode: Top 25% globally, 500+ problems, rating 1500+
+- CodeChef: 2-star Div 4, rating 1400+
+
+Certifications:
+- AWS Certified Cloud Practitioner
+- Cisco Introduction to Cybersecurity
+- Cisco Cybersecurity Essentials
+- Coursera Data Structure / Algorithms courses
+
+Achievement:
+- Amazon ML Challenge 2025 Rank 2015/210000 teams (Top ~10%)
+
+Technologies:
+Primary includes Python, Rust, C++, FastAPI, GenAI, LangChain, MCP, Next.js,
+TypeScript, Web3/EVM, x402, GraphQL, DSA.
+Secondary includes React/Vite, REST APIs, OpenCV, TensorFlow, MySQL,
+MongoDB, AWS, sqlite-vec, Sentence-Transformers and Docker.
+
+These facts are grounded in the supplied resume. The actual extracted source text is
+also present in the repository's test fixture for this resume.
+
+================================================================================
+PART 2 — STARTING THE ATS
+================================================================================
+
+Think of HireFlow as a pipeline of transformations.
+
+The resume starts as:
+
+        PDF or DOCX file
+              |
+              v
+        Text extraction
+              |
+              v
+        Raw text
+              |
+              v
+        LLM understanding
+              |
+              v
+        Structured candidate data
+              |
+              +-------------------+
+              |                   |
+              v                   v
+        Keyword index        Vector embedding
+              |                   |
+              +---------+---------+
+                        |
+                        v
+                    Search/Retrieval
+                        |
+                        v
+                    ATS Scoring
+                        |
+                        v
+                 GitHub Verification
+                        |
+                        v
+                   Final Ranking
+
+Every arrow changes the representation of the same candidate.
+
+================================================================================
+PART 3 — STEP 1: RESUME FILE ENTERS THE SYSTEM
+================================================================================
+
+Input:
+23AD044(3).docx
+
+In the production-style ingestion flow, the user normally supplies a CSV row plus
+resume files. The CSV helps identify the candidate and can provide GitHub metadata.
+The ingestion code resolves a resume to a candidate using:
+1. exact filename stem = roll number
+2. filename starts with roll number
+3. reverse short-stem matching
+4. first two candidate-name parts found in filename
+
+The point of this stage is not to understand the resume yet.
+The point is simply:
+
+“Which candidate does this file belong to?”
+
+Output of this stage:
+- candidate ID / roll number
+- candidate name
+- resume file path
+- optional GitHub information from CSV
+
+For the sample candidate, the important human identity fields are:
+GOPI R K, gopi030506@gmail.com, 9345869720, github.com/Gopisokk.
+
+================================================================================
+PART 4 — STEP 2: DOCUMENT TEXT EXTRACTION
+================================================================================
+
+The active extractor supports PDF and DOCX.
+
+For DOCX, python-docx reads paragraphs and table cells.
+For PDF, PyMuPDF reads text content and layout information.
+
+The extractor turns:
+
+    visual document
+
+into:
+
+    plain text / numbered source lines
+
+Conceptually, the beginning of our resume becomes something like:
+
+GOPI R K
+ gopi030506@gmail.com | 9345869720 | linkedin.com/in/gopirk |
+ github.com/Gopisokk
+Education
+Chennai Institute of Technology, Chennai Sep 2023 – June 2027
+Bachelor of Technology in Artificial Intelligence and Data Science (CGPA: 7.8/10)
+Open source Contribution
+MOFA – Multi-Observable Framework for AI Agents ...
+...
+PROJECTS
+HireFlow — AI-Powered Candidate Screening & GitHub Verification Platform ...
+...
+
+The extraction stage is important because the LLM is not reading the Word document's
+visual appearance as a Word processor. It receives extracted textual content.
+
+What information is at risk here?
+- columns can be reordered incorrectly
+- scanned images may produce no text
+- tables may lose visual semantics
+- some formatting relationships disappear
+
+The extractor therefore aims to create usable textual evidence, not a perfect visual
+copy of the resume.
+
+================================================================================
+PART 5 — STEP 3: THE 3,500-CHARACTER LLM INPUT LIMIT
+================================================================================
+
+This is one of the most important implementation details.
+
+qwen_resume_parser.py contains:
+
+    MAX_CHARS = 3500
+
+and before the model call it effectively does:
+
+    if len(plain_text) > 3500:
+        plain_text = plain_text[:3500]
+
+Therefore the LLM does NOT necessarily receive the complete resume.
+
+It receives:
+
+    first 3500 characters of extracted resume text
+
+This matters for our sample resume.
+
+If the beginning contains:
+- contact information
+- education
+- MOFA
+- FireForm
+- HireFlow
+
+then those sections have a high chance of reaching Qwen.
+If some section is after character 3500, it may not be seen by the parser.
+
+Important distinction:
+The complete document may still exist on disk, but the current LLM parser does not
+send all of it to Qwen.
+
+Why was this limit added?
+- Qwen is a small local model (1.5B)
+- context and memory are constrained
+- parser uses num_ctx=4096
+- limiting input makes latency more predictable
+
+This is a design tradeoff, not a mathematical requirement.
+
+================================================================================
+PART 6 — STEP 4: WHAT EXACTLY DOES QWEN RECEIVE?
+================================================================================
+
+The LLM receives two messages.
+
+SYSTEM message:
+“You are an expert resume information extraction engine for an ATS platform.”
+
+It then receives a schema containing fields for:
+- candidate
+- education
+- experience
+- projects
+- skills
+- certifications
+- achievements
+- competitive programming
+- volunteering
+
+Important rules in the prompt include:
+- extract only information explicitly in the text
+- do not invent data
+- certifications/courses are not projects
+- LeetCode/CodeChef go under competitive programming
+- section headings such as Skills are not projects
+- missing information becomes empty/null
+
+Then the USER message is approximately:
+
+Extract resume information into JSON:
+
+<first 3500 characters of extracted resume>
+
+So Qwen is being used as a semantic parser, not as the scoring engine.
+
+================================================================================
+PART 7 — STEP 5: QWEN TURNS TEXT INTO STRUCTURED JSON
+================================================================================
+
+Why JSON?
+
+Raw text is difficult to score reliably.
+A structured representation makes each part addressable.
+
+Instead of:
+
+“Python, Rust, FastAPI, projects, CGPA 7.8...”
+
+HireFlow wants:
+
+candidate.email
+candidate.github_url
+education[]
+projects[]
+skills.programming_languages[]
+skills.frameworks[]
+certifications[]
+etc.
+
+For our sample resume, a simplified conceptual output is:
+
+{
+  "candidate": {
+    "candidate_name": "GOPI R K",
+    "email": "gopi030506@gmail.com",
+    "phone": "9345869720",
+    "github_url": "github.com/Gopisokk"
+  },
+  "education": [
+    {
+      "institution": "Chennai Institute of Technology",
+      "degree": "Bachelor of Technology in Artificial Intelligence and Data Science",
+      "cgpa": "7.8 / 10"
+    }
+  ],
+  "projects": [
+    {
+      "project_name": "HireFlow",
+      "description": "AI-driven recruitment platform...",
+      "technologies": ["Python", "FastAPI", "Sentence Transformers", "BM25", "GraphQL"]
+    }
+  ],
+  "skills": {
+      "programming_languages": ["Python", "Rust", "C++"],
+      "frameworks": ["FastAPI", "React", "Next.js"],
+      "databases": ["MySQL", "MongoDB"],
+      "cloud": ["AWS"],
+      "tools": ["sqlite-vec", "Sentence-Transformers", "Docker"]
+  }
+}
+
+IMPORTANT:
+The above is an explanation example, not a claim that every exact field/value will
+always be produced identically by Qwen. Model output depends on the text, schema and
+model version. The repository includes a test fixture showing the actual parsed
+resume representation for this candidate.
+
+================================================================================
+PART 8 — STEP 6: PYDANTIC SCHEMA VALIDATION
+================================================================================
+
+JSON syntax is not enough.
+
+Example of valid JSON but bad structure:
+
+{
+    “skills”: "Python, Rust"
+}
+
+The parser expects structured fields, so CanonicalResume/Pydantic is used to impose
+a schema contract.
+
+Think of this as:
+
+LLM output
+   |
+   v
+“Does the data have the expected shape?”
+   |
+   +---- NO ---> error/fallback
+   |
+   +---- YES --> deterministic evidence validation
+
+Pydantic checks structure and expected fields.
+It does not prove that the candidate actually possesses a skill.
+That is the job of later evidence checks and scoring.
+
+================================================================================
+PART 9 — STEP 7: DETERMINISTIC EVIDENCE VALIDATION
+================================================================================
+
+The system then passes the structured result to qwen_validator.py.
+This validator uses ordinary Python rules, not another LLM call.
+
+Why?
+Because a model should not be allowed to validate itself without an independent
+check.
+
+The validator can:
+- reject project names that are actually section headings
+- validate source-line IDs
+- check whether project names appear supported by source text
+- check whether descriptions have partial support
+- assign High/Medium/Low confidence
+- deduplicate nearly-identical project names
+- mark the result needs_review when problems occur
+
+Example from the repository's actual sample fixture:
+The extracted HireFlow project is high confidence, while AgentNexus was marked Low
+confidence because evidence alignment was weak.
+
+This is a key concept:
+
+LLM extraction = “I think these are the facts.”
+Validator = “Can I find evidence for those facts in the source?”
+
+Important current limitation:
+The validator is not perfect. Some checks are heuristic, and some values are retained
+even if the evidence match is weak. So “validated” means “passed the available rule
+checks”, not “guaranteed true”.
+
+================================================================================
+PART 10 — STEP 8: INGEST CODE FLATTENS THE STRUCTURE FOR THE DATABASE
+================================================================================
+
+After parsing, ingest.py creates a flatter candidate record.
+
+Examples:
+
+education[]
+   ↓
+“Chennai Institute of Technology Bachelor of Technology ... 7.8”
+
+skills dictionary
+   ↓
+flat skills list
+
+projects[]
+   ↓
+JSON list of project dictionaries
+
+experience[]
+   ↓
+combined experience text
+
+Then raw_text is constructed approximately from:
+
+education + experience + projects + skills
+
+This point is subtle and important.
+The searchable/scored `raw_text` is not necessarily a byte-for-byte copy of the
+original resume. It is a reconstructed representation based on parsed fields.
+If the LLM fails to extract a field, that field can be missing from this representation.
+
+If the reconstructed raw text is extremely short (<150 characters), the code falls
+back to plain document extraction.
+
+================================================================================
+PART 11 — STEP 9: MINI-LM EMBEDDING
+================================================================================
+
+Now we need two different kinds of representations:
+
+1. exact searchable words
+2. semantic meaning
+
+Exact words are useful for BM25.
+Semantic meaning is useful for vector search.
+
+MiniLM creates the semantic representation.
+
+The active model is:
+all-MiniLM-L6-v2
+
+Output size:
+384 numbers
+
+Example conceptually:
+
+Candidate text
+   ↓
+MiniLM
+   ↓
+[0.021, -0.113, 0.084, ... , 0.052]
+             384 values
+
+These numbers are NOT human-readable keywords.
+They are a numerical representation of the text in embedding space.
+
+================================================================================
+PART 12 — HOW SEMANTIC SEARCH ACTUALLY WORKS
+================================================================================
+
+This is the part many students misunderstand.
+
+Suppose the JD says:
+
+“Backend Python developer with FastAPI and experience building REST services.”
+
+Candidate A literally says:
+
+“Python FastAPI REST API development.”
+
+Candidate B says:
+
+“Developed server-side services using Flask and asynchronous HTTP endpoints.”
+
+Candidate A has stronger lexical overlap.
+Candidate B may still be semantically related because the Transformer learned
+relationships between words and sentences.
+
+Conceptually, MiniLM places texts in a vector space:
+
+                    backend
+                       *
+                     *   *
+       Candidate B *       * Candidate A
+                   *         *
+                  *   JD      *
+                   *         *
+
+Texts with related meaning tend to have vectors pointing in similar directions.
+
+The active code normalizes vectors and uses dot product as cosine-similarity-like
+comparison.
+
+Similarity concept:
+
+cosine(A,B) = (A dot B) / (||A|| ||B||)
+
+After L2 normalization, the denominator becomes 1, so:
+
+cosine(A,B) = A dot B
+
+That is why the code can compare normalized vectors efficiently.
+
+IMPORTANT:
+Semantic search does not “read the database sentence by sentence and think like a
+human”. It compares numerical vectors produced from text.
+
+================================================================================
+PART 13 — STEP 10: WHAT GOES INTO THE VECTOR DATABASE?
+================================================================================
+
+For each candidate, HireFlow stores a 384-dimensional embedding in sqlite-vec.
+
+It can then answer a question like:
+
+“Which stored candidates have vectors most similar to this JD vector?”
+
+The vector table returns candidates ordered by distance.
+Lower distance = better vector match.
+
+So the search path is:
+
+JD text
+  ↓
+MiniLM
+  ↓
+JD vector
+  ↓
+sqlite-vec
+  ↓
+nearest candidate vectors
+
+================================================================================
+PART 14 — STEP 11: THE JOB DESCRIPTION ENTERS SEARCH
+================================================================================
+
+Now the recruiter provides a Job Description.
+
+Example JD for our tutorial:
+
+“Backend Python Developer
+
+Required:
+Python, FastAPI, PostgreSQL, Docker
+
+Preferred:
+AWS, Redis
+
+Experience with REST APIs and testing.”
+
+The exact JD can be different; this is a teaching example.
+
+Search.py does two major things with the JD:
+
+A. Create a semantic embedding.
+B. Extract lexical/JD keywords.
+
+This is why the system has two search brains.
+
+================================================================================
+PART 15 — STEP 12: JD EMBEDDING
+================================================================================
+
+The JD is sent to the same MiniLM model used for candidate embeddings.
+
+Why the same model?
+Because the candidate and JD vectors must live in the same vector space.
+
+Otherwise this would be meaningless:
+
+Candidate embedding from Model A
+vs.
+JD embedding from Model B
+
+Using the same MiniLM model makes comparison mathematically coherent.
+
+So:
+
+JD
+ ↓
+MiniLM
+ ↓
+384-dimensional JD vector
+
+Then sqlite-vec compares:
+
+JD vector
+against
+candidate vector #1
+candidate vector #2
+candidate vector #3
+...
+
+================================================================================
+PART 16 — STEP 13: WHAT IS BM25?
+================================================================================
+
+BM25 is a lexical relevance algorithm.
+It answers:
+
+“How strongly does this document contain the words/terms in the query?”
+
+Unlike vector search, it is not trying to understand the whole meaning.
+It is primarily matching words and their importance/frequency.
+
+Think of a JD query containing:
+
+Python FastAPI PostgreSQL Docker
+
+A candidate document containing:
+
+Python
+FastAPI
+Docker
+
+will get strong lexical evidence.
+
+A candidate that never mentions FastAPI may be weaker in BM25 even if its overall
+meaning sounds like backend development.
+
+That exactness is useful in technical recruitment.
+
+================================================================================
+PART 17 — STEP 14: HOW FTS5/BM25 SEARCH WORKS IN THIS PROJECT
+================================================================================
+
+HireFlow uses SQLite FTS5.
+
+When the candidate is ingested, a search-text field is stored in students_fts.
+The current ingest/search design uses candidate text including name, raw_text and
+skills.
+
+Then the JD keyword extractor generates terms.
+The search code takes the first 30 extracted JD terms for the BM25 retrieval query,
+then cleans punctuation and limits the query to 50 terms.
+
+Conceptually, for our example JD, the BM25 query may include terms such as:
+
+Python
+FastAPI
+PostgreSQL
+Docker
+AWS
+Redis
+REST
+APIs
+Testing
+
+The FTS5 engine scans its inverted text index rather than scanning every resume from
+scratch.
+
+For a candidate document, BM25 gives a relevance score.
+
+Important implementation detail:
+SQLite FTS5's `bm25()` values are negative, with more negative meaning better match.
+The code converts the score to its absolute value before returning it, so the rest
+of HireFlow can treat the result as a positive relevance number.
+
+================================================================================
+PART 18 — SIMPLE BM25 INTUITION
+================================================================================
+
+You do not need the entire formula to understand the implementation, but the key
+ideas are:
+
+1. Does the candidate document contain the query term?
+2. How rare is that term across documents?
+3. How often does it occur in this document?
+4. Is the document unusually long?
+
+Rare technical terms can be powerful.
+For example, “FastAPI” may be more discriminative than generic words like “developer”.
+
+BM25 therefore does not simply count every word equally.
+
+A rough intuition is:
+
+rare + present + useful frequency
+                ↓
+          strong relevance
+
+common + generic + repeated
+                ↓
+          weaker relevance
+
+================================================================================
+PART 19 — OUR SAMPLE CANDIDATE IN BM25
+================================================================================
+
+Our sample resume contains technical content such as:
+
+Python
+FastAPI
+Sentence Transformers
+BM25
+GitHub GraphQL
+NLP
+Rust
+Cargo
+Tokio
+TypeScript
+Web3/EVM
+AWS
+Docker
+sqlite-vec
+
+For the example backend JD:
+
+Required:
+Python, FastAPI, PostgreSQL, Docker
+
+Preferred:
+AWS, Redis
+
+The candidate has strong lexical overlap for:
+Python
+FastAPI
+Docker
+AWS
+REST APIs
+
+But the supplied resume does not explicitly list PostgreSQL or Redis in its technology
+section.
+
+That is important:
+BM25 is supposed to expose this difference instead of pretending semantic similarity
+means exact technology evidence.
+
+================================================================================
+PART 20 — STEP 15: SEMANTIC SEARCH VS LEXICAL SEARCH
+================================================================================
+
+Lexical search asks:
+
+“Are these words/terms present?”
+
+Semantic search asks:
+
+“Are these texts close in meaning in the embedding space?”
+
+Example:
+
+JD:
+“backend service development”
+
+Resume:
+“server-side API engineering”
+
+Lexical overlap may be limited.
+Semantic similarity can still be strong.
+
+Opposite case:
+
+JD:
+“FastAPI”
+
+Resume:
+“Python web backend”
+
+Semantic similarity may be decent.
+But lexical evidence for the exact technology “FastAPI” is absent.
+
+This is why HireFlow does not choose only one method.
+
+================================================================================
+PART 21 — STEP 16: RETRIEVE MORE CANDIDATES THAN YOU NEED
+================================================================================
+
+Suppose recruiter asks for Top 10.
+
+The code does not retrieve only 10 from each search engine.
+It uses:
+
+retrieve_k = top_k * 4
+
+So:
+
+Top 10 requested
+→ retrieve up to 40 vector candidates
+→ retrieve up to 40 BM25 candidates
+→ combine them
+→ produce final Top 10 shortlist after fusion
+
+Why?
+Because the best final candidate might rank slightly lower in one individual retrieval
+system and should still have a chance to survive into reranking.
+
+This is called over-retrieval before reranking.
+
+================================================================================
+PART 22 — STEP 17: RECIPROCAL RANK FUSION (RRF)
+================================================================================
+
+Now we have two ranked lists.
+
+Example:
+
+BM25 ranking:
+1. Candidate A
+2. Candidate C
+3. Candidate B
+4. Candidate D
+
+Vector ranking:
+1. Candidate B
+2. Candidate A
+3. Candidate D
+4. Candidate C
+
+RRF does not try to directly compare the raw BM25 number with the raw vector distance.
+Instead it asks:
+
+“How high did this candidate rank in each list?”
+
+Formula used by the code:
+
+RRF(candidate) = Σ 1 / (60 + rank)
+
+The code loops through each list and adds:
+
+1 / (60 + rank)
+
+for every appearance.
+
+Therefore a candidate that appears high in BOTH lists receives a strong fused score.
+
+================================================================================
+PART 23 — SAMPLE RRF CALCULATION
+================================================================================
+
+Suppose Candidate A is:
+BM25 rank = 1
+Vector rank = 2
+
+Then:
+
+RRF(A)
+= 1/(60+1) + 1/(60+2)
+= 1/61 + 1/62
+≈ 0.03252
+
+Candidate B:
+BM25 rank = 3
+Vector rank = 1
+
+RRF(B)
+= 1/63 + 1/61
+≈ 0.03175
+
+So Candidate A can rank slightly above B because it has strong positions in both.
+
+The implementation then normalizes the RRF values so the strongest candidate becomes
+100 and others are scaled relative to that maximum.
+
+This normalized RRF is still a retrieval/fusion score, NOT the final ATS score.
+
+================================================================================
+PART 24 — STEP 18: RRF OUTPUT IS THE SHORTLIST
+================================================================================
+
+After fusion:
+
+BM25 list
+   +
+Vector list
+   ↓
+RRF
+   ↓
+Shortlist
+
+Only the shortlisted candidates are then sent to the expensive evidence-based ATS
+scoring stage.
+
+This is a major architecture pattern:
+
+FAST RETRIEVAL
+      ↓
+EXPENSIVE RERANKING
+
+It is cheaper than fully scoring every candidate with every component.
+
+================================================================================
+PART 25 — STEP 19: ATS SCORING STARTS
+================================================================================
+
+Now search.py loads the stored candidate data from SQLite and calls:
+
+score_candidate(...)
+
+The ATS engine receives:
+- raw_text
+- skills
+- projects
+- education
+- email
+- phone
+- GitHub URL
+- JD text
+
+Then it computes 8 components.
+
+These components are NOT the same as BM25.
+BM25 helped retrieve candidates.
+The ATS engine decides how strong each shortlisted candidate is.
+
+================================================================================
+PART 26 — ATS COMPONENT 1: REQUIRED SKILL MATCH (35%)
+================================================================================
+
+This is the largest ATS component.
+
+Why?
+Because mandatory skills should dominate resume-to-job matching.
+
+For our example JD:
+
+Required:
+Python
+FastAPI
+PostgreSQL
+Docker
+
+Our candidate resume has:
+Python
+FastAPI
+Docker
+
+and does not visibly list PostgreSQL in the sample technology section.
+
+So a simplified required-skill view is:
+
+Python       YES
+FastAPI      YES
+PostgreSQL   NO
+Docker       YES
+
+Required match ratio:
+3 / 4 = 75%
+
+However, HireFlow does more than count them.
+It also looks at project evidence.
+
+================================================================================
+PART 27 — SKILL EVIDENCE MULTIPLIER
+================================================================================
+
+Suppose the resume only says:
+
+Skills: Python
+
+That is a weak signal.
+
+Now suppose a project says:
+
+“Built an API using Python and FastAPI.”
+
+That is stronger evidence.
+
+The code therefore uses an evidence multiplier.
+
+Base weight:
+1.0
+
+Each project that demonstrates the skill:
++0.5
+
+Therefore:
+
+Skill listed only:
+1.0
+
+Skill in one project:
+1.5
+
+Skill in two projects:
+2.0
+
+This is not saying the candidate literally has “2x ability”.
+It is a scoring mechanism that says:
+
+“I have more evidence that this claim is real.”
+
+================================================================================
+PART 28 — ATS COMPONENT 2: PROJECT EVIDENCE (25%)
+================================================================================
+
+This component asks:
+
+“How strongly do the candidate's projects demonstrate the JD requirements?”
+
+For every project, the engine combines:
+1. keyword evidence
+2. semantic evidence
+
+The code intentionally makes keyword evidence primary and SBERT semantic evidence
+secondary.
+
+Why?
+A short project description may not have enough text for semantic similarity to be
+fully reliable, while an explicit required technology is strong evidence.
+
+Example:
+
+Project:
+HireFlow
+
+Description includes:
+Python
+FastAPI
+BM25
+Sentence Transformers
+GitHub GraphQL
+
+For our backend JD:
+Python and FastAPI are explicit project evidence.
+
+That project therefore becomes stronger proof than a resume that merely lists
+Python under “Technologies”.
+
+================================================================================
+PART 29 — ATS COMPONENT 3: SEMANTIC ALIGNMENT (10%)
+================================================================================
+
+The ATS engine encodes the whole candidate raw_text and the JD.
+
+Then:
+
+raw_cosine = dot(resume_embedding, jd_embedding)
+
+because both vectors are normalized.
+
+The raw cosine is then calibrated using a sigmoid.
+
+The implementation uses approximately:
+
+score = 100 / (1 + exp(-15 * (cosine - 0.30)))
+
+This means raw cosine is NOT treated directly as a percentage.
+
+Why calibrate?
+Because a cosine of 0.36 should not be interpreted as “36% matching”.
+The sigmoid maps the model's observed similarity range into a more useful scoring
+range for the ATS.
+
+The code comments give these reference points:
+0.28 → about 44
+0.36 → about 71
+0.50 → about 95
+
+================================================================================
+PART 30 — ATS COMPONENT 4: EXPERIENCE RELEVANCE (10%)
+================================================================================
+
+The engine heuristically looks for:
+- entry/mid/senior/lead signals
+- broad domains such as web, ML, systems, DevOps, mobile, security, blockchain
+
+For our sample candidate:
+- projects demonstrate backend/API/AI/ML/system experience
+- the resume contains substantial technical project evidence
+
+The result is a heuristic fit score, not a full understanding of career seniority.
+
+Important limitation:
+This is rules-based and should not be presented as a human-equivalent experience
+assessment.
+
+================================================================================
+PART 31 — ATS COMPONENT 5: KEYWORD COVERAGE (8%)
+================================================================================
+
+This is another lexical coverage signal inside the ATS engine.
+It is separate from the database BM25 retrieval stage.
+
+Important distinction:
+
+BM25 retrieval:
+“What candidates should enter the shortlist?”
+
+Keyword Coverage component:
+“How much of the JD vocabulary is present in this candidate's text?”
+
+So the project uses lexical logic twice, but for different purposes.
+
+================================================================================
+PART 32 — ATS COMPONENT 6: RESUME QUALITY (5%)
+================================================================================
+
+This component checks things like:
+- email
+- phone
+- GitHub
+- major sections
+- skill count
+- quantified metrics
+- word count
+- number of projects
+
+This is not technical competence.
+It is more like document completeness and ATS usability.
+
+For our candidate:
+- email exists
+- phone exists
+- GitHub exists
+- education exists
+- projects exist
+- quantified project metrics exist (e.g. 26+ tests, 17+ tests, 36+ tools)
+
+So this component can be healthy.
+
+================================================================================
+PART 33 — ATS COMPONENT 7: EDUCATION (4%)
+================================================================================
+
+The engine checks degree/field patterns.
+
+Our sample has:
+
+Bachelor of Technology
+Artificial Intelligence and Data Science
+CGPA 7.8/10
+
+The system recognizes CS-related / technical education patterns and may add a CGPA
+bonus when the supported regex pattern matches.
+
+Important limitation:
+This is a heuristic educational signal.
+It does not understand the quality of the curriculum like a human committee would.
+
+================================================================================
+PART 34 — ATS COMPONENT 8: CERTIFICATIONS (3%)
+================================================================================
+
+The engine uses regular-expression checks for certifications/achievements such as:
+AWS, GCP, Azure, Kubernetes, hackathons, publications and coursework.
+
+Our sample contains:
+AWS Certified Cloud Practitioner
+Cisco cybersecurity certifications
+Coursera courses
+Amazon ML Challenge achievement
+
+Therefore this component has supporting positive evidence.
+
+Again, this is text recognition, not credential verification.
+
+================================================================================
+PART 35 — PENALTY LAYER
+================================================================================
+
+The engine can subtract from the score.
+
+It penalizes patterns such as:
+- very low required-skill ratio
+- no meaningful project evidence
+- extremely short resume text
+- strong keyword stuffing patterns
+
+Maximum penalty:
+-15
+
+Why?
+Without a penalty, a candidate can sometimes obtain a decent weighted score through
+unrelated strengths even when a major requirement is missing.
+
+================================================================================
+PART 36 — THE COMPLETE ATS FORMULA
+================================================================================
+
+Let:
+C1 = Required Skill Match
+C2 = Project Evidence
+C3 = Semantic Alignment
+C4 = Experience Relevance
+C5 = Keyword Coverage
+C6 = Resume Quality
+C7 = Education
+C8 = Certifications
+P = penalty (0 to -15)
+
+Then:
+
+ATS Score =
+0.35*C1
++0.25*C2
++0.10*C3
++0.10*C4
++0.08*C5
++0.05*C6
++0.04*C7
++0.03*C8
++P
+
+Every C score is on a 0–100 scale.
+
+Example only:
+If a candidate produced:
+C1=80
+C2=75
+C3=70
+C4=75
+C5=80
+C6=90
+C7=80
+C8=70
+P=-3
+
+Then:
+
+ATS =
+0.35*80 = 28.00
+0.25*75 = 18.75
+0.10*70 = 7.00
+0.10*75 = 7.50
+0.08*80 = 6.40
+0.05*90 = 4.50
+0.04*80 = 3.20
+0.03*70 = 2.10
+-3 penalty
+
+ATS = 74.45
+
+The actual running project computes these values from its code; the numbers above are
+a teaching example so a reader understands the arithmetic.
+
+================================================================================
+PART 37 — ATS CONFIDENCE TIERS
+================================================================================
+
+The engine maps the final ATS score into a tier:
+
+95–100  Exceptional Match → Strongly Recommend
+85–94   Strong Match      → Recommend
+70–84   Good Match        → Recommend with Notes
+55–69   Potential Match   → Further Review
+40–54   Moderate Match    → Hold for Review
+25–39   Weak Match        → Not Recommended
+0–24    Poor Match        → Do Not Proceed
+
+These are decision-support labels, not proof that a candidate must be hired/rejected.
+
+================================================================================
+PART 38 — STEP 20: GITHUB VERIFICATION
+================================================================================
+
+Now suppose the recruiter enabled GitHub verification.
+
+The resume already contains:
+
+github.com/Gopisokk
+
+The system extracts the username:
+Gopisokk
+
+Then the GitHub verifier can fetch profile/repository information.
+
+The purpose changes here.
+
+ATS question:
+“Does this resume match the job?”
+
+GitHub question:
+“Is there public technical evidence supporting the candidate's claims?”
+
+================================================================================
+PART 39 — WHAT GITHUB DATA CAN BE USED
+================================================================================
+
+The GitHub verifier can use information such as:
+- profile/account information
+- organizations
+- repositories
+- fork status
+- stars/forks
+- languages
+- repository topics
+- README content
+- contribution history
+- commit authorship
+- activity days
+- PR/issues contribution signals
+
+The verifier groups signals into broader evidence groups such as:
+- Project Authenticity
+- Development History
+- Technical Evidence
+- Repository Quality
+- Social Context
+
+Current code has 39 registered scoring factors even though some comments in the
+repository still say “40”.
+
+For accurate reporting, say:
+“39 registered GitHub verification factors in the current implementation.”
+
+================================================================================
+PART 40 — STEP 21: PROJECT VERIFICATION
+================================================================================
+
+This is different from simply checking whether a GitHub account exists.
+
+The project verifier asks:
+
+“Does this claimed resume project correspond to something on the candidate's GitHub?”
+
+For each resume project it creates a text representation:
+
+project name + project description
+
+For each repository it creates:
+
+repo name + repo description + first ~500 chars of README
+
+Then both sides are embedded using MiniLM.
+
+The system computes a similarity matrix:
+
+             Repo A   Repo B   Repo C
+Project 1      .81      .23      .41
+Project 2      .32      .77      .29
+Project 3      .18      .21      .68
+
+Best match per project is selected.
+
+Then the verifier adds extra evidence:
+- repository is fork or not
+- candidate appears in commit authors
+- candidate commit ratio
+- active days
+- total commits
+- development span
+- language evidence
+- README alignment
+- upload-risk flags
+
+================================================================================
+PART 41 — WHAT IF THE PROJECT NAME IS DIFFERENT?
+================================================================================
+
+Resume:
+“HireFlow — AI-Powered Candidate Screening & GitHub Verification Platform”
+
+Repository:
+“hireflow”
+
+Exact name matching is not required.
+The verifier also uses description/README semantic similarity plus fuzzy project-name
+comparison and technical evidence.
+
+This is useful because developers often rename repositories or use short names.
+
+================================================================================
+PART 42 — WHAT IF THE REPOSITORY IS A FORK?
+================================================================================
+
+A fork does NOT automatically mean “fake”.
+
+Why?
+Someone can fork a project and make substantial original contributions.
+
+So the verifier checks more than isFork.
+It also considers:
+- candidate-authored commits
+- candidate commit ratio
+- activity
+- technologies
+- development span
+
+Therefore the system is looking for evidence of authorship, not just ownership.
+
+================================================================================
+PART 43 — GITHUB SCORE VS PROJECT VERIFICATION
+================================================================================
+
+These are related but not identical.
+
+GitHub profile score:
+“How credible/active/technically consistent is this GitHub profile overall?”
+
+Project verification:
+“Does this claimed resume project match a repository and show evidence of actual work?”
+
+A candidate can have:
+- strong general GitHub profile
+but
+- weak evidence for one particular claimed project.
+
+The system should not collapse those ideas into one unexplained flag.
+
+================================================================================
+PART 44 — STEP 22: FINAL COMPOSITE SCORE
+================================================================================
+
+If GitHub verification is available, search.py computes:
+
+Composite = 65% ATS + 35% GitHub
+
+Example:
+
+Candidate A:
+ATS = 82
+GitHub = 75
+
+Composite:
+82*0.65 + 75*0.35
+= 53.30 + 26.25
+= 79.55
+≈ 79.6
+
+Candidate B:
+ATS = 78
+GitHub = 90
+
+Composite:
+78*0.65 + 90*0.35
+= 50.70 + 31.50
+= 82.20
+
+Candidate B ranks above Candidate A in the composite ranking.
+
+This illustrates the purpose of GitHub evidence:
+A slightly weaker resume fit can still rank competitively if the technical evidence
+is stronger.
+
+But ATS still has the larger weight.
+
+================================================================================
+PART 45 — FINAL OUTPUT
+================================================================================
+
+Search.py then sorts the shortlisted candidates by:
+
+composite_score if GitHub exists,
+otherwise ATS/final score.
+
+Each result gets:
+- rank
+- ATS score
+- GitHub score if available
+- composite score if available
+- matched skills
+- missing skills
+- component breakdown
+- explanation
+- GitHub details/project verification when available
+
+Before results are returned:
+- raw_text is removed from the response
+- github_token is removed from the response
+
+This reduces unnecessary exposure of sensitive data in the API response.
+
+================================================================================
+PART 46 — COMPLETE EXAMPLE FLOW IN ONE VIEW
+================================================================================
+
+SAMPLE RESUME
+“GOPI R K ... Python, FastAPI, Rust, HireFlow, AgentNexus ... github.com/Gopisokk”
+                              |
+                              v
+1. FILE IDENTIFICATION
+Map resume to candidate / roll number
+                              |
+                              v
+2. TEXT EXTRACTION
+PyMuPDF or python-docx
+                              |
+                              v
+3. TRUNCATION
+First 3500 characters sent to local Qwen
+                              |
+                              v
+4. LLM EXTRACTION
+Qwen → JSON
+                              |
+                              v
+5. STRUCTURAL VALIDATION
+Pydantic / CanonicalResume
+                              |
+                              v
+6. EVIDENCE VALIDATION
+qwen_validator.py
+                              |
+                              v
+7. FLATTEN CANDIDATE DATA
+skills + projects + education + experience
+                              |
+                     +--------+---------+
+                     |                  |
+                     v                  v
+8. FTS INDEX                     9. VECTOR EMBEDDING
+candidate text                   MiniLM 384-d
+                     |                  |
+                     +--------+---------+
+                              |
+                        STORED IN SQLITE
+                              |
+                              v
+                    RECRUITER ENTERS JD
+                              |
+                    +---------+----------+
+                    |                    |
+                    v                    v
+             JD keyword extraction    JD MiniLM vector
+                    |                    |
+                    v                    v
+                 BM25              sqlite-vec search
+                    |                    |
+                    +---------+----------+
+                              |
+                             RRF
+                              |
+                              v
+                         TOP-K SHORTLIST
+                              |
+                              v
+                    ATS 8-COMPONENT SCORE
+                              |
+                              v
+                 OPTIONAL GITHUB VERIFICATION
+                              |
+                              v
+                      65/35 COMPOSITE
+                              |
+                              v
+                       FINAL RANKING
+                              |
+                              v
+                  RECRUITER EXPLANATIONS
+
+================================================================================
+PART 47 — WHAT “SEMANTIC MEANING” REALLY MEANS
+================================================================================
+
+A common interview question is:
+
+“How does the computer know that two sentences have similar meaning?”
+
+Answer:
+It does not store a symbolic dictionary of human meaning. The Transformer converts
+text into vectors learned from large-scale language training. Similar linguistic
+contexts tend to produce vectors that are closer in embedding space.
+
+Example:
+
+“built REST APIs with Python”
+
+and
+
+“developed backend HTTP services in Python”
+
+can have nearby embeddings because the model learned that the surrounding language
+patterns are related.
+
+But embeddings are not perfect.
+They can miss exact logical differences and can over-generalize.
+That is why HireFlow also keeps lexical search and structured skill evidence.
+
+================================================================================
+PART 48 — WHAT BM25 SEES VS WHAT MINILM SEES
+================================================================================
+
+Candidate text:
+
+“Developed a backend service using FastAPI and Python.”
+
+BM25 sees roughly:
+
+Developed
+backend
+service
+FastAPI
+Python
+
+and asks how these terms overlap with the query.
+
+MiniLM transforms the whole sentence into a vector and compares its position to the
+JD vector.
+
+So:
+
+BM25 = word-level / term-level relevance
+MiniLM = semantic / contextual similarity
+
+================================================================================
+PART 49 — IMPORTANT DIFFERENCE: SEARCH SCORE VS ATS SCORE
+================================================================================
+
+There are several numbers in HireFlow.
+Do not confuse them.
+
+1. Vector distance
+How close is candidate vector to JD vector?
+
+2. BM25 score
+How strongly do indexed candidate terms match JD terms?
+
+3. RRF score
+How consistently does the candidate rank across the two retrieval systems?
+
+4. ATS score
+How well does the candidate satisfy the full evidence-based scoring model?
+
+5. GitHub score
+How strong is the external technical credibility evidence?
+
+6. Composite score
+65% ATS + 35% GitHub for final ranking convenience.
+
+These numbers answer different questions.
+
+================================================================================
+PART 50 — COMMON STUDENT CONFUSIONS
+================================================================================
+
+CONFUSION 1:
+“BM25 is the final ranking.”
+
+Wrong.
+BM25 is one retrieval signal.
+
+CONFUSION 2:
+“Vector similarity tells if the candidate knows the technology.”
+
+Wrong.
+Vector similarity tells you that texts are semantically close.
+It does not prove skill possession.
+
+CONFUSION 3:
+“LLM calculates the ATS score.”
+
+Wrong.
+The LLM extracts structured information.
+The ATS engine calculates the score.
+
+CONFUSION 4:
+“GitHub proves fraud.”
+
+Wrong.
+GitHub provides evidence.
+
+CONFUSION 5:
+“RRF adds BM25 and semantic percentages.”
+
+Wrong.
+RRF fuses ranking positions using reciprocal-rank contributions.
+
+CONFUSION 6:
+“SQLite is temporary.”
+
+Wrong.
+It is a local persistent database file used by the application.
+
+================================================================================
+PART 51 — EDGE CASES A REVIEWER MAY ASK ABOUT
+================================================================================
+
+1. Scanned PDF
+Current extractor may have no usable text; OCR is a future improvement.
+
+2. Very long resume
+Only first 3500 characters reach Qwen in current parser.
+
+3. Missing required skill
+Required-skill ratio decreases and penalty may apply.
+
+4. Keyword stuffing
+Penalty layer looks for excessive repeated terms.
+
+5. Skill listed but never demonstrated
+Skill can be matched, but project evidence will be weaker.
+
+6. Skill demonstrated in several projects
+Evidence multiplier strengthens it.
+
+7. Same project repository renamed on GitHub
+Semantic/README/project matching can still help.
+
+8. Forked repository
+Fork status alone is not proof of dishonesty.
+
+9. Private repository work
+Public GitHub can underrepresent the candidate.
+
+10. No GitHub account
+ATS can still operate.
+
+11. GitHub API failure
+ATS result should conceptually remain available; GitHub is enrichment.
+
+12. No BM25 result
+Vector retrieval can still return candidates.
+
+13. No vector result
+BM25 can still return candidates.
+
+14. Both retrieval systems miss the candidate
+The candidate never reaches ATS reranking.
+This is why retrieval recall matters.
+
+15. Two resume projects match the same repo
+Current project verifier can allow duplicate best matches.
+A one-to-one matching algorithm would be stronger.
+
+16. Same candidate ingested twice
+The student row is upserted and the vector is replaced.
+
+================================================================================
+PART 52 — HOW TO EXPLAIN THE PROJECT IN AN INTERVIEW
+================================================================================
+
+A strong explanation is:
+
+“First, HireFlow converts the candidate's PDF or DOCX into text. I pass that text to
+a local Qwen model to extract a canonical structured representation containing the
+candidate's skills, projects, education and experience. I then validate the LLM output
+using deterministic evidence checks so the model is not trusted blindly. The candidate
+is stored in SQLite in both lexical and semantic forms: FTS5 gives BM25 keyword search,
+while MiniLM converts the candidate into a 384-dimensional embedding for semantic
+search.
+
+When the recruiter provides a JD, I embed the JD with the same MiniLM model and also
+extract its important keywords. I perform two independent retrievals — BM25 and vector
+similarity — and combine their ranked lists using Reciprocal Rank Fusion. That gives me
+a shortlist. I then run the full ATS scoring engine, where required skills are 35%,
+project evidence 25%, semantic alignment 10%, experience 10%, keyword coverage 8%,
+resume quality 5%, education 4% and certifications 3%, plus a penalty layer.
+
+For shortlisted candidates I can verify GitHub evidence separately, including project
+matching, repository authenticity, coding activity and technology alignment. Finally,
+when GitHub verification is available, the display ranking combines 65% ATS and 35%
+GitHub. The important design idea is that retrieval, evidence extraction, scoring and
+verification are separate stages, so each one can be tested and improved independently.”
+
+================================================================================
+PART 53 — THE 10 QUESTIONS THIS FILE SHOULD LET YOU ANSWER
+================================================================================
+
+1. What exact text is sent to the LLM?
+Answer: extracted resume text truncated to the first 3500 characters in the active parser.
+
+2. Why does the LLM return JSON?
+Answer: to convert unstructured resume text into addressable candidate fields.
+
+3. Why is Pydantic needed?
+Answer: to constrain the output structure.
+
+4. Why is a deterministic validator needed after the LLM?
+Answer: to check evidence independently of the model.
+
+5. Why store FTS5 and embeddings?
+Answer: exact lexical retrieval and semantic retrieval solve different problems.
+
+6. What does BM25 do?
+Answer: ranks candidates by lexical relevance to JD terms.
+
+7. What does semantic search do?
+Answer: compares candidate and JD meaning using normalized embedding vectors.
+
+8. Why RRF?
+Answer: to combine heterogeneous ranked lists without comparing incompatible raw scores.
+
+9. Why ATS after RRF?
+Answer: retrieval is optimized for recall/efficiency; ATS reranking is optimized for
+evidence-aware precision.
+
+10. Why GitHub after ATS?
+Answer: GitHub is an external evidence/credibility layer, not the basic resume-JD match.
+
+================================================================================
+PART 54 — FINAL MENTAL MODEL
+================================================================================
+
+If you remember only one picture, remember this:
+
+          RESUME
+             |
+             v
+         EXTRACT TEXT
+             |
+             v
+          QWEN LLM
+             |
+             v
+        STRUCTURED JSON
+             |
+             v
+         VALIDATION
+             |
+             v
+       +-----+------+
+       |            |
+       v            v
+    BM25 text    MiniLM vector
+       |            |
+       +-----+------+
+             |
+             v
+            RRF
+             |
+             v
+         SHORTLIST
+             |
+             v
+        ATS SCORING
+             |
+             v
+      GITHUB EVIDENCE
+             |
+             v
+       FINAL COMPOSITE
+             |
+             v
+        FINAL RANK
+
+The project is not “one AI model that decides who gets hired.”
+It is a pipeline in which each layer performs one job:
+
+Extraction → Understanding → Validation → Retrieval → Reranking → Verification → Ranking
+
+================================================================================
+END OF DOCUMENT
+================================================================================
